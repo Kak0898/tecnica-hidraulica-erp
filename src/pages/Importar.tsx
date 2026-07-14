@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { readExcelFile, normalizeMachineRow } from '../lib/excel'
+import { readExcelFile, normalizeMachineRow, normalizeSparePartRow } from '../lib/excel'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
@@ -26,27 +26,6 @@ const emptySummary: ImportSummary = {
 
 function normalizeText(value: any) {
   return String(value ?? '').trim()
-}
-
-function normalizeNumber(value: any) {
-  const n = Number(value ?? 0)
-  return Number.isFinite(n) ? n : 0
-}
-
-function normalizeSparePartRow(row: any) {
-  return {
-    code: normalizeText(row.code || row.codigo),
-    name: normalizeText(row.name || row.nombre),
-    brand: normalizeText(row.brand || row.marca),
-    category: normalizeText(row.category || row.categoria),
-    location: normalizeText(row.location || row.ubicacion),
-    stock: normalizeNumber(row.stock),
-    min_stock: normalizeNumber(row.min_stock || row.stock_minimo || row.minimo),
-    unit_price: normalizeNumber(row.unit_price || row.precio_unitario || row.precio),
-    unit: normalizeText(row.unit || row.unidad || 'unidad'),
-    supplier: normalizeText(row.supplier || row.proveedor),
-    notes: normalizeText(row.notes || row.notas || row.observaciones),
-  }
 }
 
 function hasImportValue(value: unknown) {

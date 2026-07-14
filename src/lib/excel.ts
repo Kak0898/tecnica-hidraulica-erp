@@ -1,7 +1,105 @@
 import * as XLSX from 'xlsx'
 
-export async function readExcelFile(file: File, sheetIndex = 0): Promise<any[]> {
-  const buffer = await file.arrayBuffer()
+const knownHeaderKeys = new Set([
+  'code',
+  'codigo',
+  'name',
+  'nombre',
+  'conteo',
+  'modelo',
+  'color',
+  'marca',
+  'serie',
+  'tipo',
+  'ano',
+  'ubicacion',
+  'estado',
+  'disponibilidad',
+  'tipodebateria',
+  'altobateria',
+  'anchobateria',
+  'largo',
+  'altura',
+  'medidas',
+  'medida',
+  'cantidad',
+  'stock',
+  'categoria',
+  'category',
+  'unidad',
+  'unit',
+  'proveedor',
+  'supplier',
+])
+
+function limpiarClave(value: string) {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/_/g, '')
+    .trim()
+}
+
+function hasCellValue(value: unknown) {
+  return String(value ?? '').trim() !== ''
+}
+
+function findHeaderRow(rows: unknown[][]) {
+  let bestIndex = -1
+  let bestScore = 0
+
+  rows.slice(0, 40).forEach((row, index) => {
+    const matches = new Set(
+      row
+        .map((value) => limpiarClave(String(value ?? '')))
+        .filter((key) => knownHeaderKeys.has(key)),
+    )
+
+    if (matches.size > bestScore) {
+      bestIndex = index
+      bestScore = matches.size
+    }
+  })
+
+  if (bestScore >= 2) return bestIndex
+  return rows.findIndex((row) => row.some(hasCellValue))
+}
+
+function rowsFromWorksheet(worksheet: XLSX.WorkSheet) {
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+    header: 1,
+    defval: '',
+    blankrows: false,
+    raw: false,
+  })
+
+  const headerIndex = findHeaderRow(matrix)
+
+  if (headerIndex < 0) return []
+
+  const headerCounts = new Map<string, number>()
+  const headers = matrix[headerIndex].map((value, columnIndex) => {
+    const base = String(value ?? '').trim() || `__columna_${columnIndex + 1}`
+    const normalized = limpiarClave(base)
+    const count = (headerCounts.get(normalized) ?? 0) + 1
+    headerCounts.set(normalized, count)
+    return count === 1 ? base : `${base}_${count}`
+  })
+
+  return matrix
+    .slice(headerIndex + 1)
+    .filter((row) => row.some(hasCellValue))
+    .map((row) =>
+      headers.reduce<Record<string, unknown>>((result, header, columnIndex) => {
+        result[header] = row[columnIndex] ?? ''
+        return result
+      }, {}),
+    )
+}
+
+export function readExcelBuffer(buffer: ArrayBuffer | Uint8Array, sheetIndex = 0): any[] {
   const workbook = XLSX.read(buffer, { type: 'array' })
 
   const sheetName = workbook.SheetNames[sheetIndex]
@@ -12,19 +110,11 @@ export async function readExcelFile(file: File, sheetIndex = 0): Promise<any[]> 
 
   const worksheet = workbook.Sheets[sheetName]
 
-  return XLSX.utils.sheet_to_json(worksheet, {
-    defval: '',
-  })
+  return rowsFromWorksheet(worksheet)
 }
 
-function limpiarClave(value: string) {
-  return String(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/_/g, '')
-    .trim()
+export async function readExcelFile(file: File, sheetIndex = 0): Promise<any[]> {
+  return readExcelBuffer(await file.arrayBuffer(), sheetIndex)
 }
 
 function get(row: any, keys: string[]) {
@@ -77,32 +167,44 @@ function slug(value: any) {
 function normalizarEstadoFisico(value: any) {
   const estado = texto(value).toLowerCase()
 
+  if (
+    estado.includes('no operativa') ||
+    estado.includes('desarmad') ||
+    estado.includes('falla') ||
+    estado.includes('falta')
+  ) return 'malo'
   if (estado.includes('nuevo')) return 'nuevo'
   if (estado.includes('usado')) return 'usado'
-  if (estado.includes('buen')) return 'buen_estado'
-  if (estado.includes('operativa')) return 'buen_estado'
+  if (estado.includes('buen')) return 'buen estado'
+  if (estado.includes('operativa')) return 'buen estado'
   if (estado.includes('regular')) return 'regular'
   if (estado.includes('revision')) return 'regular'
   if (estado.includes('revisión')) return 'regular'
+  if (estado.includes('reparacion')) return 'regular'
+  if (estado.includes('reparación')) return 'regular'
   if (estado.includes('malo')) return 'malo'
-  if (estado.includes('falla')) return 'malo'
-  if (estado.includes('desarmado')) return 'malo'
 
-  return 'buen_estado'
+  return 'buen estado'
 }
 
 function normalizarDisponibilidad(value: any) {
   const disponibilidad = texto(value).toLowerCase()
 
+  if (disponibilidad.includes('no operativa')) return 'no_disponible'
+  if (disponibilidad.includes('no disponible')) return 'no_disponible'
+  if (disponibilidad.includes('para revision')) return 'mantenimiento'
+  if (disponibilidad.includes('para revisión')) return 'mantenimiento'
+  if (disponibilidad.includes('arriendo/venta')) return 'disponible'
+  if (disponibilidad.includes('arrienda/venta')) return 'disponible'
+  if (disponibilidad.includes('en arriendo')) return 'arrendada'
   if (disponibilidad.includes('disponible')) return 'disponible'
-  if (disponibilidad.includes('arriendo')) return 'arrendada'
   if (disponibilidad.includes('arrendada')) return 'arrendada'
+  if (disponibilidad.includes('arriendo')) return 'arrendada'
   if (disponibilidad.includes('ocupada')) return 'ocupada'
   if (disponibilidad.includes('mantencion')) return 'mantenimiento'
   if (disponibilidad.includes('mantención')) return 'mantenimiento'
   if (disponibilidad.includes('mantenimiento')) return 'mantenimiento'
   if (disponibilidad.includes('baja')) return 'baja'
-  if (disponibilidad.includes('no disponible')) return 'no_disponible'
 
   return disponibilidad || 'disponible'
 }
@@ -171,17 +273,21 @@ export function normalizeMachineRow(row: any) {
 }
 
 export function normalizeSparePartRow(row: any) {
+  const medidas = texto(get(row, ['MEDIDAS', 'MEDIDA', 'medidas', 'medida']))
+  const rawCode = texto(get(row, ['CODE', 'CÓDIGO', 'CODIGO', 'code', 'código', 'codigo']))
+  const rawName = texto(get(row, ['NAME', 'NOMBRE', 'name', 'nombre']))
+
   return {
-    code: texto(row.code || row.codigo),
-    name: texto(row.name || row.nombre),
-    brand: texto(row.brand || row.marca),
-    category: texto(row.category || row.categoria),
-    location: texto(row.location || row.ubicacion),
-    stock: numero(row.stock),
-    min_stock: numero(row.min_stock || row.stock_minimo || row.minimo),
-    unit_price: numero(row.unit_price || row.precio_unitario || row.precio),
-    unit: texto(row.unit || row.unidad || 'unidad'),
-    supplier: texto(row.supplier || row.proveedor),
-    notes: texto(row.notes || row.notas || row.observaciones),
+    code: rawCode || (medidas ? `REP-${slug(medidas)}` : ''),
+    name: rawName || (medidas ? `Rueda de carga ${medidas}` : ''),
+    brand: texto(get(row, ['BRAND', 'MARCA', 'brand', 'marca'])),
+    category: texto(get(row, ['CATEGORY', 'CATEGORÍA', 'CATEGORIA', 'category', 'categoría', 'categoria'])) || (medidas ? 'Ruedas de carga' : ''),
+    location: texto(get(row, ['LOCATION', 'UBICACIÓN', 'UBICACION', 'location', 'ubicación', 'ubicacion'])),
+    stock: numero(get(row, ['STOCK', 'CANTIDAD', 'stock', 'cantidad'])),
+    min_stock: numero(get(row, ['MIN_STOCK', 'STOCK MÍNIMO', 'STOCK MINIMO', 'MÍNIMO', 'MINIMO', 'min_stock', 'stock mínimo', 'stock minimo', 'mínimo', 'minimo'])),
+    unit_price: numero(get(row, ['UNIT_PRICE', 'PRECIO UNITARIO', 'PRECIO', 'unit_price', 'precio unitario', 'precio'])),
+    unit: texto(get(row, ['UNIT', 'UNIDAD', 'unit', 'unidad'])) || 'unidad',
+    supplier: texto(get(row, ['SUPPLIER', 'PROVEEDOR', 'supplier', 'proveedor'])),
+    notes: texto(get(row, ['NOTES', 'NOTAS', 'OBSERVACIONES', 'notes', 'notas', 'observaciones'])),
   }
 }
