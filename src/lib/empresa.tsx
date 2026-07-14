@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './supabase'
 
 type Empresa = {
@@ -32,12 +32,11 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   const [userEmail, setUserEmail] = useState('')
   const [empresas, setEmpresas] = useState<UsuarioEmpresa[]>([])
   const [activeEmpresaId, setActiveEmpresaId] = useState('')
+  const currentUserIdRef = useRef('')
 
-  async function refreshEmpresa() {
+  async function loadEmpresaForUser(user: { id: string; email?: string } | null) {
     setLoading(true)
-
-    const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData.session?.user
+    currentUserIdRef.current = user?.id || ''
     setUserEmail(user?.email || '')
 
     if (!user) {
@@ -66,6 +65,11 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }
 
+  async function refreshEmpresa() {
+    const { data: sessionData } = await supabase.auth.getSession()
+    await loadEmpresaForUser(sessionData.session?.user || null)
+  }
+
   async function setEmpresaActiva(empresaId: string) {
     const { error } = await supabase.rpc('set_empresa_activa', {
       p_empresa_id: empresaId,
@@ -82,8 +86,12 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshEmpresa()
 
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      refreshEmpresa()
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
+      if (event === 'SIGNED_IN' && session?.user.id === currentUserIdRef.current) return
+      window.setTimeout(() => {
+        void loadEmpresaForUser(session?.user || null)
+      }, 0)
     })
 
     const onCompanyUpdated = () => {

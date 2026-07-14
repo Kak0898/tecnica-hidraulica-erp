@@ -143,8 +143,11 @@ export function SupabaseSetup() {
   useEffect(() => {
     load()
 
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      load()
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
+      window.setTimeout(() => {
+        void load()
+      }, 0)
     })
 
     return () => data.subscription.unsubscribe()
