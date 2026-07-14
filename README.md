@@ -2,7 +2,7 @@
 
 Base inicial del ERP propio para Técnica Hidráulica Ltda., preparada para evolucionar hacia una plataforma modular y multiempresa.
 
-La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, cotizaciones/presupuestos, órdenes de trabajo, Google Ads, trabajadores, horas extra, anticipos, pagos y liquidaciones.
+La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, trabajadores, horas extra, anticipos, pagos, liquidaciones, empresas asociadas y flota de vehículos.
 
 ## Objetivo
 

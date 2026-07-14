@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, HardHat, LogOut, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { supabase } from '../lib/supabase';
 
@@ -15,6 +15,7 @@ const groups = [
     label: 'Comercial',
     items: [
       { key: 'clientes', label: 'Clientes', icon: UsersRound },
+      { key: 'empresas-asociadas', label: 'Empresas asociadas', icon: Handshake },
       { key: 'presupuestos', label: 'Presupuestos', icon: FileText },
       { key: 'cotizaciones', label: 'Cotizaciones', icon: ReceiptText },
       { key: 'ordenes', label: 'Órdenes de trabajo', icon: Wrench },
@@ -26,6 +27,7 @@ const groups = [
     label: 'Administración',
     items: [
       { key: 'personas-pagos', label: 'Personas y pagos', icon: HardHat },
+      { key: 'flota-vehiculos', label: 'Flota de vehículos', icon: CarFront },
       { key: 'maquinaria', label: 'Maquinaria', icon: Boxes },
       { key: 'repuestos', label: 'Repuestos', icon: PackageSearch },
       { key: 'auditorias', label: 'Auditorías', icon: ClipboardCheck },

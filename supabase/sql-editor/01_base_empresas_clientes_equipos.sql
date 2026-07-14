@@ -2,6 +2,8 @@ create extension if not exists "pgcrypto";
 create extension if not exists "uuid-ossp";
 
 drop table if exists public.ia_consultas cascade;
+drop table if exists public.vehiculos_empresa cascade;
+drop table if exists public.empresas_asociadas cascade;
 drop table if exists public.whatsapp_mensajes cascade;
 drop table if exists public.crm_oportunidades cascade;
 drop table if exists public.documentos_personas cascade;
@@ -460,4 +462,3 @@ create table if not exists public.cotizaciones (
   updated_at timestamptz not null default now(),
   unique (empresa_id, folio)
 );
-

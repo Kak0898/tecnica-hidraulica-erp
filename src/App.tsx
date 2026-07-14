@@ -15,6 +15,8 @@ import { IATecnica } from './pages/IATecnica';
 import { PersonasPagos } from './pages/PersonasPagos';
 import { GoogleAds } from './pages/GoogleAds';
 import { Login } from './pages/Login';
+import { EmpresasAsociadas } from './pages/EmpresasAsociadas';
+import { FlotaVehiculos } from './pages/FlotaVehiculos';
 
 function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
@@ -83,6 +85,7 @@ export default function App(){
   {page==='dashboard' && <Dashboard/>}
   {page==='supabase' && <SupabaseSetup/>}
   {page==='clientes' && <Clientes/>}
+  {page==='empresas-asociadas' && <EmpresasAsociadas/>}
   {page==='presupuestos' && <DocumentosComerciales modo="presupuesto"/>}
   {page==='cotizaciones' && <DocumentosComerciales modo="cotizacion"/>}
   {page==='ordenes' && <OrdenesTrabajo/>}
@@ -90,6 +93,7 @@ export default function App(){
   {page==='whatsapp' && <WhatsApp/>}
   {page==='ia' && <IATecnica/>}
   {page==='personas-pagos' && <PersonasPagos/>}
+  {page==='flota-vehiculos' && <FlotaVehiculos/>}
   {page==='google-ads' && <GoogleAds/>}
   {page==='maquinaria' && <Maquinaria/>}
   {page==='repuestos' && <Repuestos/>}

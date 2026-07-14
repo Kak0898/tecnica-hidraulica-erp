@@ -6,6 +6,8 @@ Este esquema prepara Supabase como base central del ERP:
 - Clientes y contactos
 - Equipos/maquinaria con QR
 - Repuestos
+- Empresas asociadas
+- Flota de vehiculos y vencimientos
 - Cotizaciones
 - Documentos de cotizacion/presupuesto
 - Ordenes de trabajo

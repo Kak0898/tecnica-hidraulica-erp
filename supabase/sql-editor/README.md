@@ -78,3 +78,9 @@ Para completar Google Ads y el control detallado de horas extra, ejecuta:
 `10_google_ads_horas_extra.sql`
 
 Ese patch es no destructivo y agrega campañas, métricas diarias, recomendaciones automáticas y horas extra asociables a una liquidación.
+
+Para habilitar empresas asociadas y la flota de vehículos, ejecuta:
+
+`11_flota_empresas_asociadas.sql`
+
+Ese patch es no destructivo y agrega el directorio de empresas relacionadas, vehículos, conductores, asignaciones, kilometraje y vencimientos. Requiere haber ejecutado antes `09_personas_pagos_honorarios.sql`.

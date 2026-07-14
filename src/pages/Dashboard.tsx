@@ -350,7 +350,7 @@ export function Dashboard() {
           <p className="text-sm font-semibold uppercase text-blue-700">Técnica Hidráulica ERP</p>
           <h2 className="mt-1 text-3xl font-bold text-slate-950">Dashboard Comercial</h2>
           <p className="mt-2 max-w-3xl text-slate-600">
-            Inventario operativo, disponibilidad de flota y respaldo de repuestos para decisiones comerciales.
+            Inventario operativo, disponibilidad de maquinaria y respaldo de repuestos para decisiones comerciales.
           </p>
         </div>
 
@@ -365,7 +365,7 @@ export function Dashboard() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
         <KpiCard
-          title="Flota inventariada"
+          title="Maquinaria inventariada"
           value={stats.totalMachines}
           detail={`${stats.buenEstado} en buen estado · ${stats.regular} regulares`}
           tone="blue"
@@ -381,7 +381,7 @@ export function Dashboard() {
         />
 
         <KpiCard
-          title="Salud de flota"
+          title="Salud de maquinaria"
           value={`${stats.saludFlota}%`}
           detail={`${stats.buenEstado} máquinas en buen estado`}
           tone="amber"
@@ -399,7 +399,7 @@ export function Dashboard() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <Card>
-          <ChartTitle title="Flota por marca" subtitle="Concentración comercial por fabricante" />
+          <ChartTitle title="Maquinaria por marca" subtitle="Concentración comercial por fabricante" />
 
           <div className="h-80 min-h-80">
             {stats.marcasData.length ? (
@@ -417,7 +417,7 @@ export function Dashboard() {
         </Card>
 
         <Card>
-          <ChartTitle title="Disponibilidad de flota" subtitle="Estado comercial actual" />
+          <ChartTitle title="Disponibilidad de maquinaria" subtitle="Estado comercial actual" />
 
           <div className="h-80 min-h-80">
             {stats.disponibilidadData.length ? (
@@ -466,7 +466,7 @@ export function Dashboard() {
 
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <Card>
-          <ChartTitle title="Mix de maquinaria" subtitle="Tipos con mayor presencia en la flota" />
+          <ChartTitle title="Mix de maquinaria" subtitle="Tipos con mayor presencia en el inventario" />
 
           <div className="h-80 min-h-80">
             {stats.tiposData.length ? (
@@ -484,7 +484,7 @@ export function Dashboard() {
         </Card>
 
         <Card>
-          <ChartTitle title="Condición física" subtitle="Lectura rápida del estado real de la flota" />
+          <ChartTitle title="Condición física" subtitle="Lectura rápida del estado real de la maquinaria" />
 
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded border border-emerald-200 bg-emerald-50 p-4">
