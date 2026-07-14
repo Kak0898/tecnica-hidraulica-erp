@@ -11,7 +11,7 @@ type FeedbackToastProps = {
 function inferTone(message: string): FeedbackTone {
   if (/error|fall[oó]|no se pudo|no se pudieron|inv[aá]lid|rechaz|denegad|problema/i.test(message)) return 'error'
   if (/no hay|falta|primero|selecciona|completa|ingresa|a[uú]n|antes de|no puede|no se puede|requiere/i.test(message)) return 'warning'
-  if (/guardad|cread|actualizad|eliminad|registrad|generad|copiad|aprobado|pagado|enviado|activad|descargad|subid|cerrad|asociad|recuperad|agregad/i.test(message)) return 'success'
+  if (/guardad|cread|actualizad|eliminad|registrad|generad|copiad|aprobado|pagado|enviado|activad|descargad|subid|cerrad|asociad|recuperad|agregad|completad/i.test(message)) return 'success'
   return 'info'
 }
 

@@ -407,7 +407,6 @@ create table if not exists public.machines (
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (code),
   unique (empresa_id, code)
 );
 
@@ -430,7 +429,6 @@ create table if not exists public.spare_parts (
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (code),
   unique (empresa_id, code)
 );
 

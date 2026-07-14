@@ -135,12 +135,15 @@ export function normalizeMachineRow(row: any) {
   const largo = numero(get(row, ['LARGO', 'largo']))
   const altura = numero(get(row, ['ALTURA', 'altura']))
 
+  const identidadEquipo = slug(`${marca}-${modelo}-${tipo}`)
   const code =
     conteo
       ? `MAQ-${String(conteo).padStart(3, '0')}`
       : serie
         ? `SERIE-${slug(serie)}`
-        : `MAQ-${slug(`${marca}-${modelo}-${tipo}`)}`
+        : identidadEquipo
+          ? `MAQ-${identidadEquipo}`
+          : ''
 
   const name = [marca, modelo, tipo, serie].filter(Boolean).join(' ') || code
 
