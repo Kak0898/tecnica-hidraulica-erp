@@ -1011,26 +1011,34 @@ export function PersonasPagos() {
               <h3 className="text-lg font-bold text-slate-950">Calculadora de Sueldo</h3>
             </div>
 
-            <div className="grid gap-3">
-              <select className="rounded border border-slate-300 px-3 py-3" value={sueldoForm.persona_id} onChange={(event) => updateSueldo({ persona_id: event.target.value })}>
-                <option value="">Trabajador</option>
-                {personasActivas.filter((persona) => persona.tipo_relacion === 'contrato').map((persona) => <option key={persona.id} value={persona.id}>{persona.nombre} · {persona.rut || 'sin RUT'}</option>)}
-              </select>
+            <div className="grid gap-4">
+              <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+                Trabajador
+                <select className="rounded border border-slate-300 bg-white px-3 py-3 font-normal text-slate-950" value={sueldoForm.persona_id} onChange={(event) => updateSueldo({ persona_id: event.target.value })}>
+                  <option value="">Seleccionar trabajador</option>
+                  {personasActivas.filter((persona) => persona.tipo_relacion === 'contrato').map((persona) => <option key={persona.id} value={persona.id}>{persona.nombre} · {persona.rut || 'sin RUT'}</option>)}
+                </select>
+              </label>
               <div className="grid gap-3 sm:grid-cols-2">
-                <input className="rounded border border-slate-300 px-3 py-3" type="month" value={sueldoForm.periodo} onChange={(event) => updateSueldo({ periodo: event.target.value })} />
-                <select className="rounded border border-slate-300 px-3 py-3" value={sueldoForm.contrato_tipo} onChange={(event) => updateSueldo({ contrato_tipo: event.target.value })}>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Periodo de liquidación<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="month" value={sueldoForm.periodo} onChange={(event) => updateSueldo({ periodo: event.target.value })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Tipo de contrato<select className="rounded border border-slate-300 bg-white px-3 py-3 font-normal text-slate-950" value={sueldoForm.contrato_tipo} onChange={(event) => updateSueldo({ contrato_tipo: event.target.value })}>
                   <option value="indefinido">Contrato indefinido</option>
                   <option value="plazo_fijo">Plazo fijo / obra</option>
-                </select>
+                </select></label>
+              </div>
+
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="font-bold text-slate-950">Haberes del período</h4>
+                <p className="mt-1 text-xs text-slate-500">Estos montos forman el total imponible y los haberes no imponibles.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Sueldo base imponible" value={sueldoForm.sueldo_base} onChange={(event) => updateSueldo({ sueldo_base: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Gratificación" value={sueldoForm.gratificacion} onChange={(event) => updateSueldo({ gratificacion: Number(event.target.value) })} />
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Sueldo base imponible<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.sueldo_base} onChange={(event) => updateSueldo({ sueldo_base: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Gratificación imponible<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.gratificacion} onChange={(event) => updateSueldo({ gratificacion: Number(event.target.value) })} /></label>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Bonos imponibles" value={sueldoForm.bonos_imponibles} onChange={(event) => updateSueldo({ bonos_imponibles: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Monto horas extra" value={sueldoForm.horas_extra} onChange={(event) => updateSueldo({ horas_extra: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="No imponibles" value={sueldoForm.no_imponibles} onChange={(event) => updateSueldo({ no_imponibles: Number(event.target.value) })} />
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Bonos imponibles<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.bonos_imponibles} onChange={(event) => updateSueldo({ bonos_imponibles: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Monto horas extra<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.horas_extra} onChange={(event) => updateSueldo({ horas_extra: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Haberes no imponibles<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.no_imponibles} onChange={(event) => updateSueldo({ no_imponibles: Number(event.target.value) })} /></label>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 <button type="button" onClick={() => updateSueldo({ horas_extra: totalHorasExtraPeriodo })} disabled={!sueldoForm.persona_id} className="rounded border border-violet-200 bg-violet-50 px-3 py-2 text-left text-xs font-semibold text-violet-800 disabled:opacity-50">
@@ -1040,33 +1048,46 @@ export function PersonasPagos() {
                   Cargar anticipos pagados · {money(anticiposPeriodo)}
                 </button>
               </div>
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="font-bold text-slate-950">Bases y parámetros previsionales</h4>
+                <p className="mt-1 text-xs text-slate-500">La base previsional y la base AFC se calculan aplicando estos topes al total imponible.</p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Valor UF del mes" value={sueldoForm.valor_uf} onChange={(event) => updateSueldo({ valor_uf: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.1" placeholder="Tope previsional UF" value={sueldoForm.tope_previsional_uf} onChange={(event) => updateSueldo({ tope_previsional_uf: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.1" placeholder="Tope AFC UF" value={sueldoForm.tope_afc_uf} onChange={(event) => updateSueldo({ tope_afc_uf: Number(event.target.value) })} />
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Valor UF del mes<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.valor_uf} onChange={(event) => updateSueldo({ valor_uf: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Tope previsional (UF)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.1" value={sueldoForm.tope_previsional_uf} onChange={(event) => updateSueldo({ tope_previsional_uf: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Tope AFC (UF)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.1" value={sueldoForm.tope_afc_uf} onChange={(event) => updateSueldo({ tope_afc_uf: Number(event.target.value) })} /></label>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <select className="rounded border border-slate-300 px-3 py-3" value={sueldoForm.afp} onChange={(event) => updateSueldo({ afp: event.target.value })}>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">AFP<select className="rounded border border-slate-300 bg-white px-3 py-3 font-normal text-slate-950" value={sueldoForm.afp} onChange={(event) => updateSueldo({ afp: event.target.value })}>
                   {Object.entries(AFP_COMISIONES).map(([afp, comision]) => <option key={afp} value={afp}>{afp} · {comision}%</option>)}
-                </select>
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.01" placeholder="Comisión AFP %" value={sueldoForm.afp_comision} onChange={(event) => updateSueldo({ afp_comision: Number(event.target.value) })} />
+                </select></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Comisión AFP (%)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.01" value={sueldoForm.afp_comision} onChange={(event) => updateSueldo({ afp_comision: Number(event.target.value) })} /></label>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <select className="rounded border border-slate-300 px-3 py-3" value={sueldoForm.salud_tipo} onChange={(event) => updateSueldo({ salud_tipo: event.target.value })}>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Sistema de salud<select className="rounded border border-slate-300 bg-white px-3 py-3 font-normal text-slate-950" value={sueldoForm.salud_tipo} onChange={(event) => updateSueldo({ salud_tipo: event.target.value })}>
                   <option value="fonasa">Fonasa 7%</option>
                   <option value="isapre">Isapre 7% + adicional</option>
-                </select>
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Salud adicional" value={sueldoForm.salud_adicional} onChange={(event) => updateSueldo({ salud_adicional: Number(event.target.value) })} />
+                </select></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Adicional de salud / Isapre<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.salud_adicional} onChange={(event) => updateSueldo({ salud_adicional: Number(event.target.value) })} /></label>
+              </div>
+
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="font-bold text-slate-950">Aportes del empleador</h4>
+                <p className="mt-1 text-xs text-slate-500">Se suman al costo empresa, pero no se descuentan del líquido del trabajador.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.01" placeholder="Mutual empleador %" value={sueldoForm.mutual_tasa} onChange={(event) => updateSueldo({ mutual_tasa: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.01" placeholder="SIS empleador %" value={sueldoForm.sis_tasa} onChange={(event) => updateSueldo({ sis_tasa: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" step="0.01" placeholder="Aporte previsional empleador %" value={sueldoForm.aporte_previsional_empleador_tasa} onChange={(event) => updateSueldo({ aporte_previsional_empleador_tasa: Number(event.target.value) })} />
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Mutual empleador (%)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.01" value={sueldoForm.mutual_tasa} onChange={(event) => updateSueldo({ mutual_tasa: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">SIS empleador (%)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.01" value={sueldoForm.sis_tasa} onChange={(event) => updateSueldo({ sis_tasa: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Aporte previsional empleador (%)<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" step="0.01" value={sueldoForm.aporte_previsional_empleador_tasa} onChange={(event) => updateSueldo({ aporte_previsional_empleador_tasa: Number(event.target.value) })} /></label>
+              </div>
+
+              <div className="border-t border-slate-200 pt-3">
+                <h4 className="font-bold text-slate-950">Otros descuentos del trabajador</h4>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Impuesto único" value={sueldoForm.impuesto_unico} onChange={(event) => updateSueldo({ impuesto_unico: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Otros descuentos" value={sueldoForm.otros_descuentos} onChange={(event) => updateSueldo({ otros_descuentos: Number(event.target.value) })} />
-                <input className="rounded border border-slate-300 px-3 py-3" type="number" placeholder="Anticipos" value={sueldoForm.anticipos} onChange={(event) => updateSueldo({ anticipos: Number(event.target.value) })} />
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Impuesto único<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.impuesto_unico} onChange={(event) => updateSueldo({ impuesto_unico: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Otros descuentos<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.otros_descuentos} onChange={(event) => updateSueldo({ otros_descuentos: Number(event.target.value) })} /></label>
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Anticipos pagados<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.anticipos} onChange={(event) => updateSueldo({ anticipos: Number(event.target.value) })} /></label>
               </div>
             </div>
 
