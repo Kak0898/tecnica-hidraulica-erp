@@ -8,6 +8,7 @@ Este esquema prepara Supabase como base central del ERP:
 - Repuestos
 - Empresas asociadas
 - Flota de vehiculos y vencimientos
+- Productos comerciales y publicaciones multicanal
 - Cotizaciones
 - Documentos de cotizacion/presupuesto
 - Ordenes de trabajo

@@ -17,6 +17,7 @@ import { GoogleAds } from './pages/GoogleAds';
 import { Login } from './pages/Login';
 import { EmpresasAsociadas } from './pages/EmpresasAsociadas';
 import { FlotaVehiculos } from './pages/FlotaVehiculos';
+import { PublicacionesProductos } from './pages/PublicacionesProductos';
 
 function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
@@ -88,6 +89,7 @@ export default function App(){
   {page==='empresas-asociadas' && <EmpresasAsociadas/>}
   {page==='presupuestos' && <DocumentosComerciales modo="presupuesto"/>}
   {page==='cotizaciones' && <DocumentosComerciales modo="cotizacion"/>}
+  {page==='publicaciones-productos' && <PublicacionesProductos/>}
   {page==='ordenes' && <OrdenesTrabajo/>}
   {page==='crm' && <CRM/>}
   {page==='whatsapp' && <WhatsApp/>}

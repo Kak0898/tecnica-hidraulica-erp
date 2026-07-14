@@ -2,7 +2,7 @@
 
 Base inicial del ERP propio para Técnica Hidráulica Ltda., preparada para evolucionar hacia una plataforma modular y multiempresa.
 
-La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, trabajadores, horas extra, anticipos, pagos, liquidaciones, empresas asociadas y flota de vehículos.
+La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, trabajadores, horas extra, anticipos, pagos, liquidaciones, empresas asociadas, flota de vehículos y publicaciones multicanal de productos.
 
 ## Objetivo
 
@@ -22,6 +22,7 @@ Centralizar la operación técnica y comercial en una sola plataforma conectada 
 - IA técnica
 - Google Ads con métricas y recomendaciones diarias
 - Trabajadores, horas extra, anticipos y liquidaciones
+- Catálogo comercial y enlaces de publicaciones por producto
 
 ## Puesta en marcha
 
@@ -33,7 +34,9 @@ Para una base Supabase nueva, ejecutar completo:
 
 Este archivo es el SQL integral y recrea las tablas del ERP. Para una base existente con datos, no volver a ejecutar `schema.sql`; ejecutar solamente:
 
-`supabase/sql-editor/10_google_ads_horas_extra.sql`
+el patch incremental más reciente requerido, por ejemplo:
+
+`supabase/sql-editor/12_publicaciones_productos.sql`
 
 ### 2. Usuario y contraseña
 

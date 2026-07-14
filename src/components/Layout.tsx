@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { supabase } from '../lib/supabase';
 
@@ -18,6 +18,7 @@ const groups = [
       { key: 'empresas-asociadas', label: 'Empresas asociadas', icon: Handshake },
       { key: 'presupuestos', label: 'Presupuestos', icon: FileText },
       { key: 'cotizaciones', label: 'Cotizaciones', icon: ReceiptText },
+      { key: 'publicaciones-productos', label: 'Publicaciones', icon: Megaphone },
       { key: 'ordenes', label: 'Órdenes de trabajo', icon: Wrench },
       { key: 'crm', label: 'CRM', icon: Building2 },
       { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },

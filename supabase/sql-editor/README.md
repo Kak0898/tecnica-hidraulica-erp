@@ -84,3 +84,9 @@ Para habilitar empresas asociadas y la flota de vehículos, ejecuta:
 `11_flota_empresas_asociadas.sql`
 
 Ese patch es no destructivo y agrega el directorio de empresas relacionadas, vehículos, conductores, asignaciones, kilometraje y vencimientos. Requiere haber ejecutado antes `09_personas_pagos_honorarios.sql`.
+
+Para habilitar el catálogo comercial y el centro de publicaciones de productos, ejecuta:
+
+`12_publicaciones_productos.sql`
+
+Ese patch es no destructivo y agrega productos comerciales con múltiples enlaces por plataforma, precio publicado, estado, visitas y consultas.

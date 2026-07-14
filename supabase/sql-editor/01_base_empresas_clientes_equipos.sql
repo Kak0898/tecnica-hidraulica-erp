@@ -2,6 +2,8 @@ create extension if not exists "pgcrypto";
 create extension if not exists "uuid-ossp";
 
 drop table if exists public.ia_consultas cascade;
+drop table if exists public.publicaciones_productos cascade;
+drop table if exists public.productos_comerciales cascade;
 drop table if exists public.vehiculos_empresa cascade;
 drop table if exists public.empresas_asociadas cascade;
 drop table if exists public.whatsapp_mensajes cascade;
