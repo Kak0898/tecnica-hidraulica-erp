@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
 
 export function Login() {
@@ -126,7 +127,7 @@ export function Login() {
               </label>
             )}
 
-            {message && <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">{message}</div>}
+            <FeedbackToast message={message} onClose={() => setMessage('')} />
 
             <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3.5 font-bold text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800 disabled:opacity-60">
               {loading && <LoaderCircle className="animate-spin" size={18} />}

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Copy, ExternalLink, Eye, Link2, Megaphone, MessageSquare, Package, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
 
@@ -210,6 +211,11 @@ export function PublicacionesProductos() {
   }
 
   function startPublication(product?: Product, publication?: Publication) {
+    if (!publication && !product && !products.length) {
+      setMessage('Primero crea un producto antes de agregar un enlace de publicación.')
+      return
+    }
+
     if (publication) {
       setEditingPublicationId(publication.id)
       setPublicationForm({
@@ -323,13 +329,13 @@ export function PublicacionesProductos() {
           <p className="mt-2 max-w-3xl text-slate-600">Reúne cada producto y todos sus enlaces de venta en un solo lugar para saber dónde está publicado y qué canal genera consultas.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => void copyLinks()} disabled={!activeLinks.length} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-40"><Copy size={17} /> Copiar enlaces activos</button>
-          <button onClick={() => startPublication()} disabled={!products.length} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 disabled:opacity-40"><Link2 size={17} /> Agregar enlace</button>
+          <button onClick={() => void copyLinks()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"><Copy size={17} /> Copiar enlaces activos</button>
+          <button onClick={() => startPublication()} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700"><Link2 size={17} /> Agregar enlace</button>
           <button onClick={() => startProduct()} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm"><Plus size={17} /> Nuevo producto</button>
         </div>
       </div>
 
-      {message && <div className={`mb-5 rounded-xl border px-4 py-3 text-sm ${/activado|error|válido|completa|ingresa|selecciona|pudieron/i.test(message) ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card><p className="text-sm font-medium text-slate-500">Productos</p><p className="mt-2 text-3xl font-black text-slate-950">{products.length}</p><p className="mt-1 text-xs text-slate-500">en el catálogo comercial</p></Card>
@@ -377,7 +383,7 @@ export function PublicacionesProductos() {
         <div className="grid gap-3 md:grid-cols-[1fr_260px_auto]">
           <label className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar producto, SKU, plataforma o enlace..." className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4" /></label>
           <select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-3"><option value="todas">Todas las plataformas</option>{platforms.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-          <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 font-semibold text-slate-600 disabled:opacity-40"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /> Actualizar</button>
+          <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 font-semibold text-slate-600 disabled:opacity-40"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /> {loading ? 'Actualizando...' : 'Actualizar'}</button>
         </div>
       </Card>
 
@@ -400,7 +406,7 @@ export function PublicacionesProductos() {
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     <button onClick={() => startPublication(product)} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white"><Plus size={15} /> Publicar</button>
-                    <button onClick={() => void copyLinks(product)} disabled={!activeCount} className="rounded-lg border border-slate-200 p-2 text-slate-600 disabled:opacity-30" title="Copiar enlaces activos"><Copy size={17} /></button>
+                    <button onClick={() => void copyLinks(product)} className="rounded-lg border border-slate-200 p-2 text-slate-600" title={activeCount ? 'Copiar enlaces activos' : 'Este producto todavía no tiene enlaces activos'}><Copy size={17} /></button>
                     <button onClick={() => startProduct(product)} className="rounded-lg border border-slate-200 p-2 text-slate-600" title="Editar producto"><Pencil size={17} /></button>
                     <button onClick={() => void removeProduct(product)} className="rounded-lg border border-red-100 p-2 text-red-500" title="Eliminar producto"><Trash2 size={17} /></button>
                   </div>

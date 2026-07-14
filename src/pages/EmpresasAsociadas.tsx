@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Building2, Handshake, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
 
@@ -148,7 +149,11 @@ export function EmpresasAsociadas() {
   }
 
   async function save() {
-    if (!activeEmpresaId || !form.razon_social.trim()) {
+    if (!activeEmpresaId) {
+      setMessage('Selecciona una empresa activa antes de agregar una empresa asociada.')
+      return
+    }
+    if (!form.razon_social.trim()) {
       setMessage('Ingresa la razón social de la empresa asociada.')
       return
     }
@@ -213,7 +218,7 @@ export function EmpresasAsociadas() {
           <p className="mt-2 text-slate-600">Directorio de proveedores, contratistas, talleres, clientes corporativos y socios de TH.</p>
         </div>
         <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50">
-          <RefreshCw size={18} /> Actualizar
+          <RefreshCw size={18} /> {loading ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
 
@@ -223,7 +228,7 @@ export function EmpresasAsociadas() {
         <Card><div className="text-sm font-semibold text-slate-500">Relaciones comerciales</div><div className="mt-2 text-3xl font-black text-emerald-700">{commercialCount}</div></Card>
       </div>
 
-      {message && <div className="mb-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <Card>
@@ -258,7 +263,7 @@ export function EmpresasAsociadas() {
             <textarea className="min-h-20 rounded border border-slate-300 px-3 py-3" placeholder="Notas internas" value={form.notas} onChange={(event) => setForm({ ...form, notas: event.target.value })} />
           </div>
 
-          <button onClick={save} disabled={saving || !activeEmpresaId} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">
+          <button onClick={save} disabled={saving} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">
             {editingId ? <Pencil size={18} /> : <Plus size={18} />} {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar empresa'}
           </button>
         </Card>

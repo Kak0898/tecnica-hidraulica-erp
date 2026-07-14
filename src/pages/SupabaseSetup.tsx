@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Building2, CheckCircle2, Database, LogIn, LogOut, RefreshCw, ShieldAlert, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 
 type Empresa = {
   id: string
@@ -493,11 +494,7 @@ export function SupabaseSetup() {
         </Card>
       </div>
 
-      {message && (
-        <div className="mt-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">
-          {message}
-        </div>
-      )}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card>
@@ -571,10 +568,10 @@ export function SupabaseSetup() {
               </p>
               <button
                 onClick={createEmpresaBase}
-                disabled={!userId || actionLoading}
+                disabled={actionLoading}
                 className="rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
               >
-                Crear empresa base
+                {actionLoading ? 'Creando...' : 'Crear empresa base'}
               </button>
             </div>
           )}
@@ -619,10 +616,10 @@ export function SupabaseSetup() {
 
         <button
           onClick={saveUserProfile}
-          disabled={!userId || actionLoading}
+          disabled={actionLoading}
           className="mt-4 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Guardar mi perfil comercial
+          {actionLoading ? 'Guardando...' : 'Guardar mi perfil comercial'}
         </button>
       </Card>
 
@@ -673,10 +670,10 @@ export function SupabaseSetup() {
 
         <button
           onClick={createEmpresa}
-          disabled={!userId || actionLoading}
+          disabled={actionLoading}
           className="mt-4 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Crear empresa
+          {actionLoading ? 'Creando...' : 'Crear empresa'}
         </button>
       </Card>
 
@@ -751,10 +748,10 @@ export function SupabaseSetup() {
 
         <button
           onClick={saveBranding}
-          disabled={!activeEmpresaId || actionLoading}
+          disabled={actionLoading}
           className="mt-4 rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Guardar datos de la empresa
+          {actionLoading ? 'Guardando...' : 'Guardar datos de la empresa'}
         </button>
       </Card>
     </div>

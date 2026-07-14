@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, BarChart3, CheckCircle2, ExternalLink, Lightbulb, MousePointerClick, Plus, RefreshCw, Search, Settings2, Sparkles, Target } from 'lucide-react'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
 
@@ -274,12 +275,12 @@ export function GoogleAds() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setShowSetup((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><Settings2 size={18} /> Configurar</button>
-          <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={18} /> Actualizar</button>
+          <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={18} /> {loading ? 'Actualizando...' : 'Actualizar'}</button>
           <a href="https://ads.google.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800"><ExternalLink size={18} /> Abrir Google Ads</a>
         </div>
       </div>
 
-      {message && <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard title="Inversión" value={money(summary.cost)} detail={latestDate || 'Sin fecha'} icon={<BarChart3 />} />
@@ -314,7 +315,7 @@ export function GoogleAds() {
               <NumberInput label="ROAS objetivo" value={campaignForm.objetivo_roas} onChange={(value) => setCampaignForm({ ...campaignForm, objetivo_roas: value })} step="0.1" />
               <Input label="Enlace directo (opcional)" value={campaignForm.url_google_ads} onChange={(value) => setCampaignForm({ ...campaignForm, url_google_ads: value })} placeholder="https://ads.google.com/..." />
             </div>
-            <button onClick={saveCampaign} disabled={saving} className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:opacity-50">Guardar campaña</button>
+            <button onClick={saveCampaign} disabled={saving} className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar campaña'}</button>
           </Card>
 
           <Card>
@@ -330,7 +331,7 @@ export function GoogleAds() {
               <NumberInput label="Cuota impresiones %" value={metricForm.cuota_impresiones} onChange={(value) => setMetricForm({ ...metricForm, cuota_impresiones: value })} step="0.1" />
               <NumberInput label="Pérdida por presupuesto %" value={metricForm.perdida_presupuesto} onChange={(value) => setMetricForm({ ...metricForm, perdida_presupuesto: value })} step="0.1" />
             </div>
-            <button onClick={saveMetric} disabled={saving || !campaigns.length} className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 font-bold text-white disabled:opacity-50">Guardar métricas y analizar</button>
+            <button onClick={saveMetric} disabled={saving} className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 font-bold text-white disabled:opacity-50">{saving ? 'Analizando...' : 'Guardar métricas y analizar'}</button>
           </Card>
         </div>
       )}

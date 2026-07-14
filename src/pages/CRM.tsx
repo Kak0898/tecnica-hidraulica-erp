@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BriefcaseBusiness, DollarSign, RefreshCw, TrendingUp } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
 
 type Cliente = {
@@ -152,11 +153,11 @@ export function CRM() {
 
         <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50">
           <RefreshCw size={18} />
-          Actualizar
+          {loading ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
 
-      {message && <div className="mb-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="mb-4 grid gap-4 md:grid-cols-4">
         <Card>

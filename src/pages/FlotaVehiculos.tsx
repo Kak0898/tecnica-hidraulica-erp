@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CarFront, Gauge, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
 
@@ -101,7 +102,8 @@ export function FlotaVehiculos() {
   }
 
   async function save() {
-    if (!activeEmpresaId || !form.patente.trim() || !form.marca.trim() || !form.modelo.trim()) { setMessage('Completa patente, marca y modelo.'); return }
+    if (!activeEmpresaId) { setMessage('Selecciona una empresa activa antes de agregar un vehículo.'); return }
+    if (!form.patente.trim() || !form.marca.trim() || !form.modelo.trim()) { setMessage('Completa patente, marca y modelo.'); return }
     setSaving(true); setMessage('')
     const payload = { empresa_id: activeEmpresaId, empresa_asociada_id: nullable(form.empresa_asociada_id), conductor_id: nullable(form.conductor_id), patente: normalizePlate(form.patente), tipo: form.tipo, propiedad: form.propiedad, marca: form.marca.trim(), modelo: form.modelo.trim(), anio: form.anio ? Number(form.anio) : null, color: nullable(form.color), combustible: nullable(form.combustible), kilometraje: Math.max(0, Number(form.kilometraje) || 0), estado: form.estado, ubicacion: nullable(form.ubicacion), revision_tecnica_vencimiento: nullable(form.revision_tecnica_vencimiento), permiso_circulacion_vencimiento: nullable(form.permiso_circulacion_vencimiento), seguro_vencimiento: nullable(form.seguro_vencimiento), mantencion_proxima_fecha: nullable(form.mantencion_proxima_fecha), mantencion_proximo_km: form.mantencion_proximo_km ? Math.max(0, Number(form.mantencion_proximo_km)) : null, notas: nullable(form.notas) }
     const query = editingId ? supabase.from('vehiculos_empresa').update(payload).eq('id', editingId).eq('empresa_id', activeEmpresaId) : supabase.from('vehiculos_empresa').insert(payload)
@@ -121,7 +123,7 @@ export function FlotaVehiculos() {
 
   return (
     <div className="mx-auto max-w-7xl pb-8">
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between"><div><h2 className="text-3xl font-bold text-slate-950">Flota de Vehículos</h2><p className="mt-2 text-slate-600">Control de vehículos, conductores, asignaciones, kilometraje y vencimientos.</p></div><button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50"><RefreshCw size={18} /> Actualizar</button></div>
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between"><div><h2 className="text-3xl font-bold text-slate-950">Flota de Vehículos</h2><p className="mt-2 text-slate-600">Control de vehículos, conductores, asignaciones, kilometraje y vencimientos.</p></div><button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50"><RefreshCw size={18} /> {loading ? 'Actualizando...' : 'Actualizar'}</button></div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card><div className="text-sm font-semibold text-slate-500">Vehículos registrados</div><div className="mt-2 text-3xl font-black text-slate-950">{items.length}</div></Card>
@@ -130,7 +132,7 @@ export function FlotaVehiculos() {
         <Card><div className="text-sm font-semibold text-slate-500">Documentos por vencer</div><div className="mt-2 text-3xl font-black text-red-700">{documentAlerts}</div></Card>
       </div>
 
-      {message && <div className="mb-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="grid gap-5 xl:grid-cols-[430px_1fr]">
         <Card>
@@ -151,7 +153,7 @@ export function FlotaVehiculos() {
             <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-xs font-semibold text-slate-600">Próxima mantención<input type="date" className="rounded border border-slate-300 px-3 py-3 text-sm" value={form.mantencion_proxima_fecha} onChange={(event) => setForm({ ...form, mantencion_proxima_fecha: event.target.value })} /></label><label className="grid gap-1 text-xs font-semibold text-slate-600">Próximo kilometraje<input type="number" min="0" className="rounded border border-slate-300 px-3 py-3 text-sm" value={form.mantencion_proximo_km} onChange={(event) => setForm({ ...form, mantencion_proximo_km: event.target.value })} /></label></div>
             <textarea className="min-h-20 rounded border border-slate-300 px-3 py-3" placeholder="Notas del vehículo" value={form.notas} onChange={(event) => setForm({ ...form, notas: event.target.value })} />
           </div>
-          <button onClick={save} disabled={saving || !activeEmpresaId} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{editingId ? <Pencil size={18} /> : <Plus size={18} />} {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar a la flota'}</button>
+          <button onClick={save} disabled={saving} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{editingId ? <Pencil size={18} /> : <Plus size={18} />} {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar a la flota'}</button>
         </Card>
 
         <Card>

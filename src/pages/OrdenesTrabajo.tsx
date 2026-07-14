@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ClipboardList, FileText, RefreshCw, Wrench } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
 
 type Cliente = {
@@ -179,11 +180,11 @@ export function OrdenesTrabajo() {
 
         <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50">
           <RefreshCw size={18} />
-          Actualizar
+          {loading ? 'Actualizando...' : 'Actualizar'}
         </button>
       </div>
 
-      {message && <div className="mb-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
@@ -202,8 +203,8 @@ export function OrdenesTrabajo() {
               ))}
             </select>
 
-            <button onClick={createFromQuote} disabled={saving || !selectedDoc} className="mt-4 w-full rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50">
-              Crear OT desde cotización
+            <button onClick={createFromQuote} disabled={saving} className="mt-4 w-full rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50">
+              {saving ? 'Creando OT...' : 'Crear OT desde cotización'}
             </button>
           </Card>
 
@@ -234,7 +235,7 @@ export function OrdenesTrabajo() {
             </div>
 
             <button onClick={createManual} disabled={saving} className="mt-4 w-full rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">
-              Crear OT manual
+              {saving ? 'Creando OT...' : 'Crear OT manual'}
             </button>
           </Card>
         </div>

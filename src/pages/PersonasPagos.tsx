@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Banknote, Calculator, CheckCircle2, Clock3, Download, ExternalLink, FileText, Printer, RefreshCw, RotateCcw, Trash2, UserMinus, UserPlus, WalletCards } from 'lucide-react'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
 
 const RETENCION_HONORARIOS_2026 = 15.25
@@ -920,12 +921,12 @@ export function PersonasPagos() {
           </button>
           <button onClick={load} disabled={loading || saving} className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50">
             <RefreshCw size={18} />
-            Actualizar
+            {loading ? 'Actualizando...' : 'Actualizar'}
           </button>
         </div>
       </div>
 
-      {message && <div className="mb-4 rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">{message}</div>}
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <div className="mb-4 grid gap-4 md:grid-cols-4">
         <Card><p className="text-sm text-slate-500">Personas</p><p className="mt-2 text-3xl font-bold text-slate-950">{resumen.personas}</p></Card>
@@ -987,7 +988,7 @@ export function PersonasPagos() {
                 <input className="rounded border border-slate-300 px-3 py-3" placeholder="N° cuenta" value={personaForm.numero_cuenta} onChange={(event) => setPersonaForm({ ...personaForm, numero_cuenta: event.target.value })} />
               </div>
             </div>
-            <button onClick={savePersona} disabled={saving} className="mt-4 w-full rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">Agregar trabajador</button>
+            <button onClick={savePersona} disabled={saving} className="mt-4 w-full rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Guardando...' : 'Agregar trabajador'}</button>
           </Card>
 
           <Card>
@@ -1017,7 +1018,7 @@ export function PersonasPagos() {
                 Monto estimado: <b>{money(Number(horaExtraForm.horas) * Number(horaExtraForm.valor_hora) * Number(horaExtraForm.factor))}</b>
               </div>
             </div>
-            <button onClick={saveHoraExtra} disabled={saving} className="mt-4 w-full rounded bg-violet-700 px-4 py-3 font-semibold text-white disabled:opacity-50">Guardar horas extra</button>
+            <button onClick={saveHoraExtra} disabled={saving} className="mt-4 w-full rounded bg-violet-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar horas extra'}</button>
           </Card>
 
           <Card>
@@ -1056,10 +1057,10 @@ export function PersonasPagos() {
                 <label className="grid gap-1.5 text-sm font-semibold text-slate-700">Haberes no imponibles<input className="rounded border border-slate-300 px-3 py-3 font-normal text-slate-950" type="number" min="0" value={sueldoForm.no_imponibles} onChange={(event) => updateSueldo({ no_imponibles: Number(event.target.value) })} /></label>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                <button type="button" onClick={() => updateSueldo({ horas_extra: totalHorasExtraPeriodo })} disabled={!sueldoForm.persona_id} className="rounded border border-violet-200 bg-violet-50 px-3 py-2 text-left text-xs font-semibold text-violet-800 disabled:opacity-50">
+                <button type="button" onClick={() => sueldoForm.persona_id ? updateSueldo({ horas_extra: totalHorasExtraPeriodo }) : setMessage('Selecciona un trabajador antes de cargar sus horas extra.')} className="rounded border border-violet-200 bg-violet-50 px-3 py-2 text-left text-xs font-semibold text-violet-800">
                   Cargar {horasExtraPeriodo.reduce((total, item) => total + Number(item.horas), 0)} h aprobadas · {money(totalHorasExtraPeriodo)}
                 </button>
-                <button type="button" onClick={() => updateSueldo({ anticipos: anticiposPeriodo })} disabled={!sueldoForm.persona_id} className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs font-semibold text-amber-800 disabled:opacity-50">
+                <button type="button" onClick={() => sueldoForm.persona_id ? updateSueldo({ anticipos: anticiposPeriodo }) : setMessage('Selecciona un trabajador antes de cargar sus anticipos pagados.')} className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs font-semibold text-amber-800">
                   Cargar anticipos pagados · {money(anticiposPeriodo)}
                 </button>
               </div>
@@ -1174,7 +1175,7 @@ export function PersonasPagos() {
               <input className="rounded border border-slate-300 px-3 py-3" placeholder="URL comprobante pago" value={pagoForm.comprobante_url} onChange={(event) => updatePago({ comprobante_url: event.target.value })} />
               <textarea className="min-h-24 rounded border border-slate-300 px-3 py-3" placeholder="Notas" value={pagoForm.notas} onChange={(event) => updatePago({ notas: event.target.value })} />
             </div>
-            <button onClick={savePago} disabled={saving} className="mt-4 w-full rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50">Guardar pago</button>
+            <button onClick={savePago} disabled={saving} className="mt-4 w-full rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar pago'}</button>
           </Card>
 
           <Card>
@@ -1202,7 +1203,7 @@ export function PersonasPagos() {
               <input className="rounded border border-slate-300 px-3 py-3" placeholder="URL archivo" value={documentoForm.url} onChange={(event) => setDocumentoForm({ ...documentoForm, url: event.target.value })} />
               <textarea className="min-h-20 rounded border border-slate-300 px-3 py-3" placeholder="Notas" value={documentoForm.notas} onChange={(event) => setDocumentoForm({ ...documentoForm, notas: event.target.value })} />
             </div>
-            <button onClick={saveDocumento} disabled={saving} className="mt-4 w-full rounded bg-slate-800 px-4 py-3 font-semibold text-white disabled:opacity-50">Guardar documento</button>
+            <button onClick={saveDocumento} disabled={saving} className="mt-4 w-full rounded bg-slate-800 px-4 py-3 font-semibold text-white disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar documento'}</button>
           </Card>
         </div>
 
@@ -1267,10 +1268,10 @@ export function PersonasPagos() {
                   <td className="py-3">{Number(item.horas).toLocaleString('es-CL')}</td>
                   <td className="py-3">{Number(item.factor).toLocaleString('es-CL')}x</td>
                   <td className="py-3 font-semibold">{money(item.monto)}</td>
-                  <td className="py-3"><select value={item.estado} disabled={item.estado === 'liquidada'} onChange={(event) => updateHoraExtra(item.id, event.target.value as HoraExtra['estado'])} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold disabled:bg-slate-100">
+                  <td className="py-3"><select value={item.estado} disabled={item.estado === 'liquidada'} title={item.estado === 'liquidada' ? 'Una hora extra liquidada queda bloqueada para conservar el historial del pago.' : 'Cambiar estado'} onChange={(event) => updateHoraExtra(item.id, event.target.value as HoraExtra['estado'])} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold disabled:bg-slate-100">
                     <option value="pendiente">Pendiente</option><option value="aprobada">Aprobada</option><option value="liquidada">Liquidada</option><option value="anulada">Anulada</option>
                   </select></td>
-                  <td className="py-3 text-right"><button onClick={() => deleteHoraExtra(item.id)} disabled={item.estado === 'liquidada'} className="rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:text-slate-300" aria-label="Eliminar horas extra"><Trash2 size={17} /></button></td>
+                  <td className="py-3 text-right"><button onClick={() => item.estado === 'liquidada' ? setMessage('No se puede eliminar una hora extra liquidada porque ya forma parte de un pago.') : deleteHoraExtra(item.id)} className={`rounded-lg p-2 hover:bg-red-50 ${item.estado === 'liquidada' ? 'text-slate-300' : 'text-red-600'}`} aria-label="Eliminar horas extra" title={item.estado === 'liquidada' ? 'La hora extra ya fue liquidada' : 'Eliminar horas extra'}><Trash2 size={17} /></button></td>
                 </tr>)}</tbody>
               </table>
               {!horasExtra.length && <div className="py-8 text-center text-slate-500">{loading ? 'Cargando horas extra...' : 'No hay horas extra registradas.'}</div>}
