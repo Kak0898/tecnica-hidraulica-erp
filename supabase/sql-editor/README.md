@@ -90,3 +90,9 @@ Para habilitar el catálogo comercial y el centro de publicaciones de productos,
 `12_publicaciones_productos.sql`
 
 Ese patch es no destructivo y agrega productos comerciales con múltiples enlaces por plataforma, precio publicado, estado, visitas y consultas.
+
+Si una cotización o presupuesto en UF falla con `22P02` o indica que un decimal no cabe en `bigint`, ejecuta:
+
+`13_hardening_cotizaciones_decimales.sql`
+
+Ese patch es no destructivo. Convierte los campos monetarios a decimales, mantiene los folios como enteros y también corrige la tabla antigua `th_documentos` cuando existe.

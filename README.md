@@ -36,7 +36,7 @@ Este archivo es el SQL integral y recrea las tablas del ERP. Para una base exist
 
 el patch incremental más reciente requerido, por ejemplo:
 
-`supabase/sql-editor/12_publicaciones_productos.sql`
+`supabase/sql-editor/13_hardening_cotizaciones_decimales.sql`
 
 ### 2. Usuario y contraseña
 

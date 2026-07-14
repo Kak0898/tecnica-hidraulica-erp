@@ -148,7 +148,10 @@ function loadCurrent(){
   doc.telefono = formatPhone(doc.telefono);
   if (doc.rutEmpresa === LEGACY_TH_RUT && !brandRut()) doc.rutEmpresa = '';
   normalizeReferencias(doc);
-  doc.documentKind = doc.documentKind || (doc.numeroReservado || doc.numero ? 'cotizacion' : INITIAL_MODE);
+  const restoredFolio = normalizedFolio(doc.numero);
+  doc.numero = restoredFolio === null ? '' : String(restoredFolio);
+  doc.numeroReservado = restoredFolio !== null;
+  doc.documentKind = doc.documentKind || (restoredFolio !== null ? 'cotizacion' : INITIAL_MODE);
   if (!shouldRestoreDraft && !doc.id) doc.documentKind = INITIAL_MODE;
   const quoteDoc = doc.documentKind === 'cotizacion' || Boolean(doc.numeroReservado || doc.numero);
   doc.documentKind = quoteDoc ? 'cotizacion' : 'presupuesto';
@@ -160,15 +163,6 @@ function loadCurrent(){
   doc.preNumero = doc.preNumero || '';
   doc.moneda = currentCurrency(doc);
   if (!doc.numeroReservado && !String(doc.observaciones || '').trim()) doc.observaciones = EJEMPLO_NOTAS;
-  if (doc.numero) {
-    const n = Number(doc.numero);
-    if (!Number.isFinite(n) || n < BASE_LAST_COTIZACION + 1 || String(doc.numero).length > 7) {
-      doc.numero = '';
-      doc.numeroReservado = false;
-      doc.estado = quoteDoc ? 'cotizacion_borrador' : 'pre_cotizacion';
-      doc.tipo = quoteDoc ? 'COTIZACIÓN' : 'PRESUPUESTO';
-    }
-  }
   if (doc.savedAt && !doc.dirty) {
     saveStatus = { type:'ok', text:'Documento guardado. PDF / Imprimir habilitado.' };
   }
@@ -260,11 +254,14 @@ function money(v){
   return moneyFor(state, v);
 }
 function currentCurrency(doc=state){return doc?.moneda === 'UF' ? 'UF' : 'CLP'}
+function finiteNumber(value, fallback=0){const number=Number(value); return Number.isFinite(number) ? number : fallback}
+function validFolio(value){const number=Number(value); return Number.isSafeInteger(number) && number >= BASE_LAST_COTIZACION + 1 && number <= 9999999}
+function normalizedFolio(value){return validFolio(value) ? Number(value) : null}
 function moneyFor(doc, v){
-  const n = Number(v) || 0;
+  const n = finiteNumber(v);
   return currentCurrency(doc) === 'UF' ? `UF ${UF.format(n)}` : CLP.format(Math.round(n)).replace(/^CLP\s?/, '').trim();
 }
-function roundAmount(v){return currentCurrency() === 'UF' ? Math.round((Number(v)||0)*100)/100 : Math.round(Number(v)||0)}
+function roundAmount(v, doc=state){const number=finiteNumber(v); return currentCurrency(doc) === 'UF' ? Math.round(number*100)/100 : Math.round(number)}
 function blankItem(){return {codigo:'', descripcion:'', cantidad:1, um:'UN', precio:0, dscto:0}}
 function subtotalItem(it){return (Number(it.cantidad)||0)*(Number(it.precio)||0)*(1-(Number(it.dscto)||0)/100)}
 function specExample(i){return ['2.600 mm','6.000 mm','540 mm','24V / 220 AH','1.600 Kg','980 Kg','Incluido / Monofásico','Amarillo Industrial','1.150 mm','Doble','Hombre a Bordo','2500 Kg app','2.360 mm','PTP (*)','Magnético','Abierto','Poliuretano'][i] || ''}
@@ -356,7 +353,10 @@ function addItem(){addRefItem(0)}
 function delItem(i){delRefItem(0,i)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function canExport(){return Boolean(state.savedAt && !state.dirty)}
-function errorText(err){return err?.message || err?.details || err?.hint || String(err || 'Error desconocido')}
+function errorText(err){
+  if (err?.code === '22P02') return 'La base de datos rechazó un decimal porque una columna antigua está configurada como entero. Ejecuta el SQL 13_hardening_cotizaciones_decimales.sql y vuelve a guardar.';
+  return err?.message || err?.details || err?.hint || String(err || 'Error desconocido');
+}
 function cleanNoteLine(line){return String(line || '').trim().replace(/^\d+\s*\.-\s*/, '')}
 function autosaveText(){
   try {
@@ -592,9 +592,9 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
 
 function localNextNumber(){
   const stored = Number(localStorage.getItem('th_last_cotizacion') || BASE_LAST_COTIZACION);
-  const current = Number(state.numero) || BASE_LAST_COTIZACION;
+  const current = validFolio(state.numero) ? Number(state.numero) : BASE_LAST_COTIZACION;
   const last = Math.max(stored, BASE_LAST_COTIZACION, state.numeroReservado ? current : BASE_LAST_COTIZACION);
-  const next = last + 1;
+  const next = Math.trunc(last) + 1;
   localStorage.setItem('th_last_cotizacion', String(next));
   return next;
 }
@@ -620,8 +620,14 @@ async function reservePreNumber(){
     }
   } catch (err) {
     console.error(err);
+    if (supabaseClient) {
+      state.preNumero = '';
+      counterStatus = { type:'bad', text:'No se pudo reservar el folio en Supabase. No se guardó para evitar números duplicados.' };
+      persist();
+      throw err;
+    }
     state.preNumero = localNextPreNumber();
-    counterStatus = { type:'bad', text:'Supabase no respondió. Se usó contador de presupuesto local.' };
+    counterStatus = { type:'warn', text:'Modo local activo. Se usó un folio de presupuesto local.' };
   }
   persist();
   return state.preNumero;
@@ -645,7 +651,7 @@ async function reserveNextNumber({force=false}={}){
       counterStatus = { type:'warn', text:'Modo local activo. Configura Supabase para usar varios computadores.' };
     }
 
-    if (!Number.isFinite(nextNum) || nextNum < BASE_LAST_COTIZACION + 1) {
+    if (!validFolio(nextNum)) {
       throw new Error('Número inválido recibido del contador.');
     }
 
@@ -656,6 +662,15 @@ async function reserveNextNumber({force=false}={}){
     persist();
   } catch (err) {
     console.error(err);
+    if (supabaseClient) {
+      state.numero = '';
+      state.numeroReservado = false;
+      state.dirty = true;
+      state.savedAt = null;
+      counterStatus = { type:'bad', text:'No se pudo reservar el folio en Supabase. No se guardó para evitar números duplicados.' };
+      persist();
+      throw err;
+    }
     const fallback = localNextNumber();
     state.numero = String(fallback);
     state.numeroReservado = true;
@@ -672,7 +687,15 @@ async function reserveNextNumber({force=false}={}){
 function buildDbPayload(){
   const quoteDoc = isQuoteDoc();
   const t = quoteDoc ? totals() : totalsPreOrden();
-  const numero = quoteDoc && state.numero ? Number(state.numero) : null;
+  const numero = quoteDoc ? normalizedFolio(state.numero) : null;
+  if (quoteDoc && numero === null) throw new Error('La cotización no tiene un folio entero válido. Intenta guardarla nuevamente para reservar otro número.');
+  const documentData = {
+    ...state,
+    numero: numero === null ? '' : String(numero),
+    numeroReservado: numero !== null,
+    dirty:false,
+    savedAt:new Date().toISOString()
+  };
   return {
     tipo: quoteDoc ? 'COTIZACIÓN' : 'PRESUPUESTO',
     estado: quoteDoc ? (state.numeroReservado ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion',
@@ -695,18 +718,19 @@ function buildDbPayload(){
     garantia: state.garantia || '',
     condiciones: state.condiciones || '',
     items: state.referencias || [],
-    subtotal: roundAmount(t.neto),
-    neto: roundAmount(t.neto),
-    iva: roundAmount(t.iva),
-    total: roundAmount(t.total),
-    data: {...state, dirty:false, savedAt:new Date().toISOString()},
+    subtotal: roundAmount(t.neto, state),
+    neto: roundAmount(t.neto, state),
+    iva: roundAmount(t.iva, state),
+    total: roundAmount(t.total, state),
+    data: documentData,
     updated_at: new Date().toISOString()
   };
 }
 
 function docFromDb(row){
   const d = row.data || {};
-  const documentKind = d.documentKind || (row.numero || d.numeroReservado || d.numero ? 'cotizacion' : 'presupuesto');
+  const savedFolio = normalizedFolio(row.numero ?? d.numero);
+  const documentKind = d.documentKind || (savedFolio !== null ? 'cotizacion' : 'presupuesto');
   const doc = {
     ...defaultDoc,
     ...d,
@@ -718,8 +742,8 @@ function docFromDb(row){
     presupuestoOrigenId: d.presupuestoOrigenId || null,
     presupuestoOrigenNumero: d.presupuestoOrigenNumero || '',
     preNumero: row.pre_numero || d.preNumero || '',
-    numero: String(row.numero || d.numero || ''),
-    numeroReservado: Boolean(row.numero || d.numeroReservado),
+    numero: savedFolio === null ? '' : String(savedFolio),
+    numeroReservado: savedFolio !== null,
     fecha: row.fecha_emision || d.fecha || today,
     vcto: row.fecha_vcto || d.vcto || '',
     moneda: d.moneda || 'CLP',
@@ -873,7 +897,9 @@ async function saveDoc(){
 
   try {
     const quoteDoc = isQuoteDoc();
-    if (quoteDoc && !state.numeroReservado) {
+    if (quoteDoc && (!state.numeroReservado || !validFolio(state.numero))) {
+      state.numero = '';
+      state.numeroReservado = false;
       await reserveNextNumber({force:true});
       state.documentKind = 'cotizacion';
       state.tipo = 'COTIZACIÓN';
