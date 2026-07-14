@@ -23,7 +23,9 @@ let brand = {...DEFAULT_BRAND};
 const CLP = new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0});
 const UF = new Intl.NumberFormat('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today = new Date().toISOString().slice(0,10);
-const AUTOSAVE_KEY = 'th_current_autosave';
+const INITIAL_MODE = new URLSearchParams(window.location.search).get('modo') === 'presupuesto' ? 'presupuesto' : 'cotizacion';
+const AUTOSAVE_KEY = `th_current_autosave_${INITIAL_MODE}`;
+const LEGACY_AUTOSAVE_KEY = 'th_current_autosave';
 const LEGACY_CURRENT_KEY = 'th_current';
 const AUTOSAVE_TTL_MS = 24 * 60 * 60 * 1000;
 const EJEMPLO_SERVICIO = 'Servicio de arriendo de un (1) apilador eléctrico marca Jungheinrich modelo ETV 214 con las siguientes características técnicas:';
@@ -71,8 +73,12 @@ const REGIONES_COMUNAS = [
 
 const defaultDoc = {
   id:null,
-  tipo:'PRE-COTIZACIÓN',
-  estado:'pre_cotizacion',
+  documentKind:INITIAL_MODE,
+  tipo:INITIAL_MODE === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
+  estado:INITIAL_MODE === 'cotizacion' ? 'cotizacion_borrador' : 'pre_cotizacion',
+  correspondePresupuesto:false,
+  presupuestoOrigenId:null,
+  presupuestoOrigenNumero:'',
   preNumero:'',
   numero:'',
   numeroReservado:false,
@@ -116,15 +122,17 @@ let supabaseClient = null;
 let state = loadCurrent();
 let saved = JSON.parse(localStorage.getItem('th_saved')||'[]');
 let previewMode = 'actual';
+let workflowMode = INITIAL_MODE;
 
 function loadCurrent(){
   let autosave = null;
-  try { autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null'); } catch(e) { autosave = null; }
+  try { autosave = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || localStorage.getItem(LEGACY_AUTOSAVE_KEY) || 'null'); } catch(e) { autosave = null; }
   localStorage.removeItem(LEGACY_CURRENT_KEY);
   const isFreshAutosave = autosave?.doc && autosave.savedAtMs && Date.now() - autosave.savedAtMs <= AUTOSAVE_TTL_MS;
   if (autosave && !isFreshAutosave) localStorage.removeItem(AUTOSAVE_KEY);
   const cached = isFreshAutosave ? autosave.doc : null;
-  const shouldRestoreDraft = Boolean(cached && !cached.id && !cached.numeroReservado);
+  const cachedKind = cached?.documentKind || (cached?.numeroReservado || cached?.numero ? 'cotizacion' : 'presupuesto');
+  const shouldRestoreDraft = Boolean(cached && !cached.id && !cached.numeroReservado && cachedKind === INITIAL_MODE);
   const doc = shouldRestoreDraft ? {...defaultDoc, ...cached} : {...defaultDoc};
   if (shouldRestoreDraft) {
     saveStatus = { type:'warn', text:'Borrador local recuperado. Se conservará por 24 horas.' };
@@ -140,8 +148,15 @@ function loadCurrent(){
   doc.telefono = formatPhone(doc.telefono);
   if (doc.rutEmpresa === LEGACY_TH_RUT && !brandRut()) doc.rutEmpresa = '';
   normalizeReferencias(doc);
-  doc.estado = doc.estado || (doc.numeroReservado ? 'cotizacion_emitida' : 'pre_cotizacion');
-  doc.tipo = doc.numeroReservado ? 'COTIZACIÓN' : 'PRE-COTIZACIÓN';
+  doc.documentKind = doc.documentKind || (doc.numeroReservado || doc.numero ? 'cotizacion' : INITIAL_MODE);
+  if (!shouldRestoreDraft && !doc.id) doc.documentKind = INITIAL_MODE;
+  const quoteDoc = doc.documentKind === 'cotizacion' || Boolean(doc.numeroReservado || doc.numero);
+  doc.documentKind = quoteDoc ? 'cotizacion' : 'presupuesto';
+  doc.estado = quoteDoc ? (doc.numeroReservado ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion';
+  doc.tipo = quoteDoc ? 'COTIZACIÓN' : 'PRESUPUESTO';
+  doc.correspondePresupuesto = Boolean(doc.correspondePresupuesto);
+  doc.presupuestoOrigenId = doc.presupuestoOrigenId || null;
+  doc.presupuestoOrigenNumero = doc.presupuestoOrigenNumero || '';
   doc.preNumero = doc.preNumero || '';
   doc.moneda = currentCurrency(doc);
   if (!doc.numeroReservado && !String(doc.observaciones || '').trim()) doc.observaciones = EJEMPLO_NOTAS;
@@ -150,8 +165,8 @@ function loadCurrent(){
     if (!Number.isFinite(n) || n < BASE_LAST_COTIZACION + 1 || String(doc.numero).length > 7) {
       doc.numero = '';
       doc.numeroReservado = false;
-      doc.estado = 'pre_cotizacion';
-      doc.tipo = 'PRE-COTIZACIÓN';
+      doc.estado = quoteDoc ? 'cotizacion_borrador' : 'pre_cotizacion';
+      doc.tipo = quoteDoc ? 'COTIZACIÓN' : 'PRESUPUESTO';
     }
   }
   if (doc.savedAt && !doc.dirty) {
@@ -166,10 +181,10 @@ function initSupabase(){
   if (!cfg.anonKey) cfg.anonKey = localStorage.getItem('ERP_SUPABASE_ANON_KEY') || '';
   if (cfg.url && cfg.anonKey && window.supabase) {
     supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
-    counterStatus = { type:'ok', text:'Supabase conectado para presupuestos y emisión segura.' };
+    counterStatus = { type:'ok', text:'Supabase conectado para presupuestos y cotizaciones.' };
     saveStatus = state.savedAt && !state.dirty
       ? { type:'ok', text:'Documento guardado. PDF / Imprimir habilitado.' }
-      : { type:'warn', text:'Supabase conectado. Guarda el presupuesto para imprimirlo o emitirlo.' };
+      : { type:'warn', text:`Supabase conectado. Guarda ${INITIAL_MODE === 'cotizacion' ? 'la cotización' : 'el presupuesto'} para habilitar el PDF.` };
   }
 }
 
@@ -180,6 +195,9 @@ async function loadBranding(){
   }
 
   try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const user = sessionData.session?.user;
+    const userMetadata = user?.user_metadata || {};
     const { data: activeData } = await supabaseClient
       .from('usuario_empresa_activa')
       .select('empresa_id')
@@ -221,11 +239,11 @@ async function loadBranding(){
       direccion: empresa.direccion || DEFAULT_BRAND.direccion,
       website: empresa.website || '',
       logoUrl: empresa.logo_url || DEFAULT_BRAND.logoUrl,
-      firmaNombre: empresa.firma_nombre || '',
-      firmaCargo: empresa.firma_cargo || '',
-      firmaEmail: empresa.firma_email || '',
-      firmaTelefono: empresa.firma_telefono || '',
-      firmaCelular: empresa.firma_celular || '',
+      firmaNombre: userMetadata.erp_nombre || empresa.firma_nombre || '',
+      firmaCargo: userMetadata.erp_cargo || empresa.firma_cargo || 'Representante comercial',
+      firmaEmail: userMetadata.erp_email_comercial || user?.email || empresa.firma_email || '',
+      firmaTelefono: userMetadata.erp_fono || empresa.firma_telefono || '',
+      firmaCelular: userMetadata.erp_celular || empresa.firma_celular || '',
       condicionesDefault: empresa.condiciones_default || '',
       observacionesDefault: empresa.observaciones_default || ''
     };
@@ -296,8 +314,12 @@ function cargosPreOrden(doc=state){return doc.preOrden?.cargos || []}
 function cargosTotal(doc=state){return cargosPreOrden(doc).reduce((s,it)=>s+subtotalCargo(it),0)}
 function totalsPreOrden(doc=state){const base=totalsFromDoc(doc); const neto=base.neto + cargosTotal(doc); const iva=neto*IVA; return {neto,iva,total:neto+iva}}
 function persist(){localStorage.setItem(AUTOSAVE_KEY,JSON.stringify({savedAtMs:Date.now(),doc:state}))}
-function clearAutosave(){localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(LEGACY_CURRENT_KEY)}
-function markDirty(){state.dirty=true; state.savedAt=null; state.savedInSupabase=false; actionMessage=''; saveStatus={type:'warn', text:'Hay cambios sin guardar. Guarda antes de imprimir o emitir.'};}
+function clearAutosave(){localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(LEGACY_AUTOSAVE_KEY); localStorage.removeItem(LEGACY_CURRENT_KEY)}
+function isQuoteDoc(doc=state){return doc?.documentKind === 'cotizacion' || Boolean(doc?.numeroReservado || doc?.numero)}
+function documentKindOf(doc){return isQuoteDoc(doc) ? 'cotizacion' : 'presupuesto'}
+function budgetDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'presupuesto')}
+function quoteDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'cotizacion')}
+function markDirty(){state.dirty=true; state.savedAt=null; state.savedInSupabase=false; actionMessage=''; saveStatus={type:'warn', text:`Hay cambios sin guardar. Guarda ${isQuoteDoc() ? 'la cotización' : 'el presupuesto'} antes de imprimir.`};}
 function setSilent(k,v){state[k]=v; markDirty(); persist()}
 function syncReferenciaText(){state.referencia=(state.referencias||[]).map(ref=>ref.texto).filter(Boolean).join('\n'); state.items=allItems()}
 function setRefItemSilent(r,i,k,v){state.referencias[r].items[i][k]=v; syncReferenciaText(); markDirty(); persist()}
@@ -326,11 +348,6 @@ function delSpec(group,i){ensurePreOrden(); state.preOrden[group].splice(i,1); m
 function setCargoSilent(i,k,v){ensurePreOrden(); state.preOrden.cargos[i][k]=v; markDirty(); persist()}
 function addCargo(){ensurePreOrden(); state.preOrden.cargos.push(blankCargo()); markDirty(); persist(); render()}
 function delCargo(i){ensurePreOrden(); state.preOrden.cargos.splice(i,1); markDirty(); persist(); render()}
-function buildPreSnapshot(){
-  const doc = JSON.parse(JSON.stringify({...state, dirty:false}));
-  delete doc.preSnapshot;
-  return {capturedAt:new Date().toISOString(), preNumero:state.preNumero || '', doc, totals:totalsPreOrden(doc)};
-}
 function setPreviewMode(mode){previewMode=mode; render()}
 function setRutSilent(v){state.rut=formatRut(v); markDirty(); persist()}
 function setPhoneSilent(v){state.telefono=formatPhone(v); markDirty(); persist()}
@@ -339,7 +356,6 @@ function addItem(){addRefItem(0)}
 function delItem(i){delRefItem(0,i)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function canExport(){return Boolean(state.savedAt && !state.dirty)}
-function canEmit(){return Boolean(!state.numeroReservado && state.id && state.savedAt && !state.dirty)}
 function errorText(err){return err?.message || err?.details || err?.hint || String(err || 'Error desconocido')}
 function cleanNoteLine(line){return String(line || '').trim().replace(/^\d+\s*\.-\s*/, '')}
 function autosaveText(){
@@ -569,7 +585,7 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
         <span>${esc(brand.firmaCargo || 'Representante comercial')}</span><br>
         <span>${esc(brand.firmaEmail || brandEmail())}</span><br>
         <span>Fono: ${esc(brand.firmaTelefono || brandPhone())}</span><br>
-        <span>Cel.: ${esc(brand.firmaCelular || brandPhone())}</span>
+        <span>Cel.: ${esc(brand.firmaCelular || '')}</span>
       </section>
     </article>`;
 }
@@ -654,12 +670,13 @@ async function reserveNextNumber({force=false}={}){
 }
 
 function buildDbPayload(){
-  const t = state.numeroReservado ? totals() : totalsPreOrden();
-  const numero = state.numero ? Number(state.numero) : null;
+  const quoteDoc = isQuoteDoc();
+  const t = quoteDoc ? totals() : totalsPreOrden();
+  const numero = quoteDoc && state.numero ? Number(state.numero) : null;
   return {
-    tipo: state.numeroReservado ? 'COTIZACIÓN' : 'PRE-COTIZACIÓN',
-    estado: state.numeroReservado ? 'cotizacion_emitida' : 'pre_cotizacion',
-    pre_numero: state.preNumero || null,
+    tipo: quoteDoc ? 'COTIZACIÓN' : 'PRESUPUESTO',
+    estado: quoteDoc ? (state.numeroReservado ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion',
+    pre_numero: quoteDoc ? null : (state.preNumero || null),
     numero,
     fecha_emision: state.fecha || null,
     fecha_vcto: state.vcto || null,
@@ -689,12 +706,17 @@ function buildDbPayload(){
 
 function docFromDb(row){
   const d = row.data || {};
+  const documentKind = d.documentKind || (row.numero || d.numeroReservado || d.numero ? 'cotizacion' : 'presupuesto');
   const doc = {
     ...defaultDoc,
     ...d,
     id: row.id,
-    tipo: row.tipo || d.tipo || (row.numero ? 'COTIZACIÓN' : 'PRE-COTIZACIÓN'),
-    estado: row.estado || d.estado || (row.numero ? 'cotizacion_emitida' : 'pre_cotizacion'),
+    documentKind,
+    tipo: documentKind === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
+    estado: documentKind === 'cotizacion' ? (row.numero ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion',
+    correspondePresupuesto: Boolean(d.correspondePresupuesto),
+    presupuestoOrigenId: d.presupuestoOrigenId || null,
+    presupuestoOrigenNumero: d.presupuestoOrigenNumero || '',
     preNumero: row.pre_numero || d.preNumero || '',
     numero: String(row.numero || d.numero || ''),
     numeroReservado: Boolean(row.numero || d.numeroReservado),
@@ -744,14 +766,19 @@ async function loadSavedDocs(){
   render();
 }
 
-async function newDoc(){
+async function newDoc(kind=workflowMode){
   previewMode = 'actual';
+  workflowMode = kind === 'presupuesto' ? 'presupuesto' : 'cotizacion';
   clearAutosave();
   state = {
     ...defaultDoc,
     id:null,
-    tipo:'PRE-COTIZACIÓN',
-    estado:'pre_cotizacion',
+    documentKind:workflowMode,
+    tipo:workflowMode === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
+    estado:workflowMode === 'cotizacion' ? 'cotizacion_borrador' : 'pre_cotizacion',
+    correspondePresupuesto:false,
+    presupuestoOrigenId:null,
+    presupuestoOrigenNumero:'',
     preNumero:'',
     numero:'',
     numeroReservado:false,
@@ -768,16 +795,76 @@ async function newDoc(){
     savedInSupabase:false,
     dirty:true
   };
-  saveStatus = { type:'warn', text:'Nuevo presupuesto sin guardar. Guarda para imprimir/enviar al cliente.' };
+  saveStatus = workflowMode === 'cotizacion'
+    ? { type:'warn', text:'Nueva cotización sin guardar. Indica si corresponde a un presupuesto y completa sus datos.' }
+    : { type:'warn', text:'Nuevo presupuesto sin guardar. Guarda para imprimir o enviar al cliente.' };
   actionMessage = '';
   busyMessage = '';
   render();
 }
 
+function createQuoteFromBudget(id){
+  const found = saved.find(item=>String(item.id) === String(id));
+  const source = found?.doc || (!isQuoteDoc(state) ? state : null);
+  if (!source || isQuoteDoc(source)) {
+    saveStatus = {type:'bad', text:'Selecciona un presupuesto válido para crear la cotización.'};
+    render();
+    return;
+  }
+
+  const sourceDoc = JSON.parse(JSON.stringify(source));
+  const snapshotDoc = JSON.parse(JSON.stringify({...sourceDoc, dirty:false}));
+  delete snapshotDoc.preSnapshot;
+  workflowMode = 'cotizacion';
+  previewMode = 'actual';
+  clearAutosave();
+  state = {
+    ...sourceDoc,
+    id:null,
+    documentKind:'cotizacion',
+    tipo:'COTIZACIÓN',
+    estado:'cotizacion_borrador',
+    numero:'',
+    numeroReservado:false,
+    correspondePresupuesto:true,
+    presupuestoOrigenId:source.id || id,
+    presupuestoOrigenNumero:source.preNumero || '',
+    preNumero:'',
+    preSnapshot:{
+      capturedAt:new Date().toISOString(),
+      preNumero:source.preNumero || '',
+      doc:snapshotDoc,
+      totals:totalsPreOrden(snapshotDoc)
+    },
+    savedAt:null,
+    savedInSupabase:false,
+    dirty:true
+  };
+  normalizeReferencias(state);
+  persist();
+  saveStatus = {type:'ok', text:`Cotización creada desde el presupuesto ${source.preNumero || 'seleccionado'}. Se asignará un número al guardar.`};
+  actionMessage = '';
+  render();
+}
+
+async function selectBudgetForQuote(value){
+  if (value === 'none') {
+    await newDoc('cotizacion');
+    state.correspondePresupuesto = false;
+    state.presupuestoOrigenId = null;
+    state.presupuestoOrigenNumero = '';
+    saveStatus = {type:'warn', text:'Cotización marcada como independiente: no corresponde a un presupuesto.'};
+    persist();
+    render();
+    return;
+  }
+  if (value) createQuoteFromBudget(value);
+}
+
 async function saveDoc(){
   if (savingDoc) return;
   savingDoc = true;
-  busyMessage = state.numeroReservado
+  busyMessage = isQuoteDoc()
     ? 'Guardando cotización final...'
     : 'Guardando presupuesto...';
   actionMessage = '';
@@ -785,7 +872,15 @@ async function saveDoc(){
   render();
 
   try {
-    if (!state.numeroReservado) await reservePreNumber();
+    const quoteDoc = isQuoteDoc();
+    if (quoteDoc && !state.numeroReservado) {
+      await reserveNextNumber({force:true});
+      state.documentKind = 'cotizacion';
+      state.tipo = 'COTIZACIÓN';
+      state.estado = 'cotizacion_emitida';
+    } else if (!quoteDoc) {
+      await reservePreNumber();
+    }
     if (supabaseClient) {
       const payload = buildDbPayload();
       let query;
@@ -799,7 +894,7 @@ async function saveDoc(){
       state = docFromDb(data);
       actionMessage = state.numeroReservado
         ? 'Cotización guardada. Puede imprimir o guardar en PDF.'
-        : 'Ahora puede Imprimir/Guardar el Archivo en PDF para enviar al cliente o puede Emitir la Cotización.';
+        : 'Presupuesto guardado. Puede imprimirlo, enviarlo al cliente o crear una cotización vinculada.';
       saveStatus = { type:'ok', text:actionMessage };
       busyMessage = '';
       clearAutosave();
@@ -816,7 +911,7 @@ async function saveDoc(){
       localStorage.setItem('th_saved',JSON.stringify(saved.slice(0,50)));
       actionMessage = state.numeroReservado
         ? 'Cotización guardada. Puede imprimir o guardar en PDF.'
-        : 'Ahora puede Imprimir/Guardar el Archivo en PDF para enviar al cliente o puede Emitir la Cotización.';
+        : 'Presupuesto guardado. Puede imprimirlo, enviarlo al cliente o crear una cotización vinculada.';
       saveStatus = { type:'warn', text:`${actionMessage} Guardado local: para uso multiusuario necesitas Supabase.` };
       busyMessage = '';
       clearAutosave();
@@ -833,81 +928,16 @@ async function saveDoc(){
   }
 }
 
-async function emitDoc(){
-  if (savingDoc || state.numeroReservado) return;
-  if (!canEmit()) {
-    saveStatus = { type:'warn', text:'Primero guarda el presupuesto actual antes de emitir.' };
-    render();
-    return;
-  }
-  busyMessage = 'Emitiendo cotización final...';
-  actionMessage = '';
-  saveStatus = { type:'warn', text:busyMessage };
-  render();
-  try {
-    savingDoc = true;
-    render();
-    const preSnapshot = state.preSnapshot || buildPreSnapshot();
-
-    if (supabaseClient && state.id) {
-      const { data, error } = await supabaseClient.rpc('emit_erp_cotizacion', { doc_id: Number(state.id) });
-      if (error) throw error;
-      state = docFromDb(data);
-      state.preSnapshot = preSnapshot;
-      const { data: updated, error: updateError } = await supabaseClient
-        .from('cotizacion_documentos')
-        .update(buildDbPayload())
-        .eq('id', state.id)
-        .select('*')
-        .single();
-      if (updateError) throw updateError;
-      state = docFromDb(updated);
-      actionMessage = 'Cotización emitida, puede Imprimir o Guardar en PDF.';
-      saveStatus = { type:'ok', text:actionMessage };
-      busyMessage = '';
-      clearAutosave();
-      await loadSavedDocs();
-    } else {
-      const next = localNextNumber();
-      state.numero = String(next);
-      state.numeroReservado = true;
-      state.tipo = 'COTIZACIÓN';
-      state.estado = 'cotizacion_emitida';
-      state.preSnapshot = preSnapshot;
-      state.dirty = false;
-      state.savedAt = new Date().toLocaleString('es-CL');
-      actionMessage = 'Cotización emitida, puede Imprimir o Guardar en PDF.';
-      saveStatus = { type:'warn', text:`${actionMessage} Modo local: para multiusuario usa Supabase.` };
-      busyMessage = '';
-      const id = state.id || Date.now();
-      state.id = id;
-      const existing = saved.findIndex(x => String(x.id) === String(id));
-      const record = {id, doc:JSON.parse(JSON.stringify(state)), source:'local'};
-      if (existing >= 0) saved[existing] = record; else saved.unshift(record);
-      localStorage.setItem('th_saved',JSON.stringify(saved.slice(0,50)));
-      clearAutosave();
-    }
-  } catch (err) {
-    console.error(err);
-    busyMessage = '';
-    actionMessage = '';
-    saveStatus = { type:'bad', text:`No se pudo emitir: ${errorText(err)}` };
-  } finally {
-    busyMessage = '';
-    savingDoc = false;
-    render();
-  }
-}
-
 function loadDoc(id){
   previewMode = 'actual';
   const found = saved.find(x=>String(x.id)===String(id));
   if (!found) return;
   state = JSON.parse(JSON.stringify(found.doc));
-  state.tipo='COTIZACIÓN';
+  state.documentKind = documentKindOf(state);
+  workflowMode = state.documentKind;
   state.numeroReservado = Boolean(state.numero);
-  state.tipo = state.numeroReservado ? 'COTIZACIÓN' : 'PRE-COTIZACIÓN';
-  state.estado = state.numeroReservado ? 'cotizacion_emitida' : 'pre_cotizacion';
+  state.tipo = isQuoteDoc(state) ? 'COTIZACIÓN' : 'PRESUPUESTO';
+  state.estado = isQuoteDoc(state) ? (state.numeroReservado ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion';
   state.dirty = false;
   state.savedAt = state.savedAt || new Date().toISOString();
   saveStatus = state.numeroReservado
@@ -937,14 +967,18 @@ function render(renderOptions={}){
   const statusClass = counterStatus.type === 'ok' ? 'ok' : counterStatus.type === 'bad' ? 'bad' : 'warn';
   const saveClass = saveStatus.type === 'ok' ? 'ok' : saveStatus.type === 'bad' ? 'bad' : 'warn';
   const exportDisabled = !canExport() || savingDoc;
-  const emitDisabled = !canEmit() || savingDoc;
-  const docLabel = state.numeroReservado ? 'COTIZACIÓN' : 'PRESUPUESTO';
-  const displayNumber = loadingNumber ? '...' : (state.numeroReservado ? state.numero : (state.preNumero || 'SIN GUARDAR'));
-  const printTitle = state.numeroReservado ? 'Exportar PDF / Imprimir' : 'Imprimir presupuesto / PDF';
+  const isFinal = isQuoteDoc();
+  const availableBudgets = budgetDocuments();
+  const visibleSaved = isFinal ? quoteDocuments() : availableBudgets;
+  const docLabel = isFinal ? 'COTIZACIÓN' : 'PRESUPUESTO';
+  const displayNumber = loadingNumber
+    ? '...'
+    : isFinal
+      ? (state.numero || 'SE ASIGNARÁ AL GUARDAR')
+      : (state.preNumero || 'SIN GUARDAR');
+  const printTitle = isFinal ? 'Exportar cotización / PDF' : 'Imprimir presupuesto / PDF';
   const exportTitle = exportDisabled ? 'Primero guarda el documento actual' : '';
-  const emitTitle = emitDisabled && !state.numeroReservado ? 'Primero guarda el presupuesto sin cambios pendientes' : '';
-  const isFinal = state.numeroReservado;
-  const hasPreSnapshot = Boolean(state.numeroReservado && state.preSnapshot?.doc);
+  const hasPreSnapshot = Boolean(isFinal && state.preSnapshot?.doc);
   const previewDoc = hasPreSnapshot && previewMode === 'pre' ? state.preSnapshot.doc : state;
   const previewPreTotals = hasPreSnapshot && previewMode === 'pre'
     ? (state.preSnapshot.totals || totalsPreOrden(previewDoc))
@@ -958,8 +992,27 @@ function render(renderOptions={}){
   <main class="app">
     ${busyMessage ? `<div class="busy-overlay" role="alert" aria-live="assertive"><div class="busy-box"><div class="spinner"></div><b>${esc(busyMessage)}</b><span>Espere unos segundos. No cierre la página ni presione otro botón.</span></div></div>` : ''}
     <aside class="panel">
-      <h1>Cotizaciones ERP</h1>
-      <p class="sub">Módulo comercial con presupuesto, emisión de cotización, contador y guardado en Supabase.</p>
+      <h1>${isFinal ? 'Cotizaciones ERP' : 'Presupuestos ERP'}</h1>
+      <p class="sub">${isFinal ? 'Crea una cotización desde un presupuesto existente o indícala como independiente.' : 'Prepara y guarda presupuestos técnicos sin convertirlos automáticamente en cotizaciones.'}</p>
+
+      ${isFinal ? `
+        <div class="origin-box">
+          <div class="origin-title">Origen de la cotización</div>
+          <div class="field">
+            <label>¿Esta cotización corresponde a un presupuesto?</label>
+            <select onchange="selectBudgetForQuote(this.value)">
+              <option value="none" ${!state.correspondePresupuesto ? 'selected' : ''}>No corresponde a un presupuesto</option>
+              ${availableBudgets.map(item=>`<option value="${esc(item.id)}" ${state.correspondePresupuesto && String(state.presupuestoOrigenId) === String(item.id) ? 'selected' : ''}>Sí · ${esc(item.doc.preNumero || 'Presupuesto sin N°')} · ${esc(item.doc.cliente || 'Sin cliente')}</option>`).join('')}
+            </select>
+          </div>
+          <div class="origin-summary ${state.correspondePresupuesto ? 'linked' : 'independent'}">
+            ${state.correspondePresupuesto
+              ? `Vinculada al presupuesto <b>${esc(state.presupuestoOrigenNumero || 'seleccionado')}</b>. Sus datos fueron copiados y pueden ajustarse en esta cotización.`
+              : 'Cotización independiente. Quedará registrada como “no corresponde a presupuesto”.'}
+          </div>
+          ${!availableBudgets.length ? '<p class="small">No hay presupuestos guardados. Puede continuar con una cotización independiente.</p>' : ''}
+        </div>
+      ` : ''}
 
       <div class="section-title">Documento</div>
       <div class="status"><span class="dot ${statusClass}"></span><span>${esc(counterStatus.text)}</span></div>
@@ -972,9 +1025,9 @@ function render(renderOptions={}){
           <input readonly value="${esc(docLabel)}">
         </div>
         <div class="field">
-          <label>${state.numeroReservado ? 'N° Cotización' : 'N° Presupuesto'}</label>
+          <label>${isFinal ? 'N° Cotización' : 'N° Presupuesto'}</label>
           <input class="locked-number" readonly value="${esc(displayNumber)}" title="Número bloqueado">
-          <span class="small">${state.numeroReservado ? 'Número final bloqueado.' : 'El número final se asigna al emitir.'}</span>
+          <span class="small">${isFinal ? (state.numeroReservado ? 'Número final bloqueado.' : 'El número final se asignará al guardar.') : 'El folio del presupuesto se asignará al guardar.'}</span>
         </div>
         <div class="field"><label>Fecha emisión</label><input type="date" value="${esc(state.fecha)}" oninput="setSilent('fecha',this.value)" onchange="render({preserveScroll:true})"></div>
         <div class="field"><label>Moneda</label><select onchange="setSilent('moneda',this.value);render({preserveScroll:true})"><option value="CLP" ${currentCurrency(state)==='CLP'?'selected':''}>Pesos CLP ($)</option><option value="UF" ${currentCurrency(state)==='UF'?'selected':''}>UF</option></select></div>
@@ -1055,18 +1108,17 @@ function render(renderOptions={}){
 
       <div class="btns sticky-actions">
         <button class="green" onclick="window.print()" ${exportDisabled ? `disabled title="${esc(exportTitle)}"` : ''}>${esc(printTitle)}</button>
-        <button class="yellow" onclick="saveDoc()" ${savingDoc?'disabled':''}>${savingDoc?'Guardando...':(state.numeroReservado?'Guardar cambios':'Guardar presupuesto')}</button>
-        <button class="primary" onclick="emitDoc()" ${emitDisabled?'disabled':''} ${emitTitle ? `title="${esc(emitTitle)}"` : ''}>Emitir cotización</button>
+        <button class="yellow" onclick="saveDoc()" ${savingDoc?'disabled':''}>${savingDoc ? 'Guardando...' : (state.savedAt && !state.dirty ? 'Guardar cambios' : (isFinal ? 'Guardar cotización' : 'Guardar presupuesto'))}</button>
         ${hasPreSnapshot ? `<button class="ghost" onclick="setPreviewMode('${previewMode === 'pre' ? 'actual' : 'pre'}')">${previewMode === 'pre' ? 'Ver cotización final' : 'Ver presupuesto guardado'}</button>` : ''}
-        <button class="ghost" onclick="newDoc()" ${loadingNumber || savingDoc?'disabled':''}>+ Nuevo presupuesto</button>
+        <button class="ghost" onclick="newDoc('${isFinal ? 'cotizacion' : 'presupuesto'}')" ${loadingNumber || savingDoc?'disabled':''}>+ ${isFinal ? 'Nueva cotización' : 'Nuevo presupuesto'}</button>
       </div>
 
-      <div class="section-title">Guardadas</div>
-      <div class="saved-list">${saved.map(s=>`<div class="saved"><b>${esc(s.doc.numeroReservado ? 'COTIZACIÓN N° ' + s.doc.numero : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente)} · ${esc(s.doc.savedAt||'')}</span><div class="btns"><button class="ghost" onclick="loadDoc('${s.id}')">Abrir</button><button class="danger" onclick="deleteSaved('${s.id}')">Borrar</button></div></div>`).join('')||'<p class="small">Aún no hay documentos guardados.</p>'}</div>
+      <div class="section-title">${isFinal ? 'Cotizaciones guardadas' : 'Presupuestos guardados'}</div>
+      <div class="saved-list">${visibleSaved.map(s=>`<div class="saved"><b>${esc(isQuoteDoc(s.doc) ? 'COTIZACIÓN N° ' + (s.doc.numero || 'SIN N°') : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente || 'Sin cliente')} · ${esc(s.doc.savedAt||'')}</span>${isQuoteDoc(s.doc) ? `<span class="saved-origin">${s.doc.correspondePresupuesto ? `Presupuesto: ${esc(s.doc.presupuestoOrigenNumero || 'vinculado')}` : 'Sin presupuesto asociado'}</span>` : ''}<div class="btns"><button class="ghost" onclick="loadDoc('${s.id}')">Abrir</button><button class="danger" onclick="deleteSaved('${s.id}')">Borrar</button></div></div>`).join('')||`<p class="small">Aún no hay ${isFinal ? 'cotizaciones' : 'presupuestos'} guardados.</p>`}</div>
     </aside>
 
     <section class="preview-wrap">
-      ${state.numeroReservado && previewMode !== 'pre' ? renderCotizacionSheet(t, docLabel, displayNumber) : renderPreOrdenSheet(previewPreTotals, previewPreNumber, previewDoc)}
+      ${isFinal && previewMode !== 'pre' ? renderCotizacionSheet(t, docLabel, displayNumber) : renderPreOrdenSheet(previewPreTotals, previewPreNumber, previewDoc)}
     </section>
   </main>`;
   if (preserveScroll) {

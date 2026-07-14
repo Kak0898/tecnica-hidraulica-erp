@@ -16,10 +16,12 @@ import { PersonasPagos } from './pages/PersonasPagos';
 import { GoogleAds } from './pages/GoogleAds';
 import { Login } from './pages/Login';
 
-function Cotizaciones() {
+function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+ const isPresupuesto = modo === 'presupuesto'
+ const titulo = isPresupuesto ? 'Presupuestos' : 'Cotizaciones'
 
  if (supabaseUrl && supabaseAnonKey) {
   window.localStorage.setItem('ERP_SUPABASE_URL', supabaseUrl)
@@ -30,12 +32,14 @@ function Cotizaciones() {
   <div className="rounded border border-slate-200 bg-white p-4 shadow-sm">
    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
     <div>
-     <h2 className="text-2xl font-bold text-slate-950">Cotizaciones</h2>
+     <h2 className="text-2xl font-bold text-slate-950">{titulo}</h2>
      <p className="mt-1 text-sm text-slate-600">
       {loading
        ? 'Cargando empresa activa...'
        : activeEmpresa
-       ? `Emitiendo documentos como ${activeEmpresa.razon_social || activeEmpresa.nombre}.`
+       ? isPresupuesto
+         ? `Preparando presupuestos como ${activeEmpresa.razon_social || activeEmpresa.nombre}.`
+         : `Emitiendo cotizaciones como ${activeEmpresa.razon_social || activeEmpresa.nombre}.`
         : 'Sin empresa activa. Configura una empresa para emitir documentos con logo y datos comerciales.'}
      </p>
     </div>
@@ -47,9 +51,9 @@ function Cotizaciones() {
 
   <div className="h-[calc(100vh-10rem)] min-h-[720px] overflow-hidden rounded border border-slate-200 bg-white">
    <iframe
-    key={activeEmpresaId || 'sin-empresa'}
-    title="Cotizaciones ERP"
-    src="/modulos/cotizaciones/index.html"
+    key={`${activeEmpresaId || 'sin-empresa'}-${modo}`}
+    title={`${titulo} ERP`}
+    src={`/modulos/cotizaciones/index.html?modo=${modo}`}
     className="h-full w-full border-0"
    />
   </div>
@@ -79,7 +83,8 @@ export default function App(){
   {page==='dashboard' && <Dashboard/>}
   {page==='supabase' && <SupabaseSetup/>}
   {page==='clientes' && <Clientes/>}
-  {page==='cotizaciones' && <Cotizaciones/>}
+  {page==='presupuestos' && <DocumentosComerciales modo="presupuesto"/>}
+  {page==='cotizaciones' && <DocumentosComerciales modo="cotizacion"/>}
   {page==='ordenes' && <OrdenesTrabajo/>}
   {page==='crm' && <CRM/>}
   {page==='whatsapp' && <WhatsApp/>}

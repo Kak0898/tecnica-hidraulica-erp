@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Building2, CheckCircle2, Database, LogIn, LogOut, RefreshCw, ShieldAlert } from 'lucide-react'
+import { Building2, CheckCircle2, Database, LogIn, LogOut, RefreshCw, ShieldAlert, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 
@@ -39,6 +39,13 @@ export function SupabaseSetup() {
   const [empresas, setEmpresas] = useState<UsuarioEmpresa[]>([])
   const [activeEmpresaId, setActiveEmpresaId] = useState('')
   const [message, setMessage] = useState('')
+  const [profileForm, setProfileForm] = useState({
+    nombre: '',
+    cargo: 'Representante comercial',
+    email: '',
+    fono: '',
+    celular: '',
+  })
   const [empresaForm, setEmpresaForm] = useState({
     nombre: '',
     slug: '',
@@ -82,6 +89,15 @@ export function SupabaseSetup() {
 
     setUserEmail(user?.email || '')
     setUserId(user?.id || '')
+
+    const userMetadata = user?.user_metadata || {}
+    setProfileForm({
+      nombre: userMetadata.erp_nombre || '',
+      cargo: userMetadata.erp_cargo || 'Representante comercial',
+      email: userMetadata.erp_email_comercial || user?.email || '',
+      fono: userMetadata.erp_fono || '',
+      celular: userMetadata.erp_celular || '',
+    })
 
     if (!user) {
       setEmpresas([])
@@ -292,6 +308,44 @@ export function SupabaseSetup() {
     }))
   }
 
+  function updateProfileForm(key: keyof typeof profileForm, value: string) {
+    setProfileForm((current) => ({ ...current, [key]: value }))
+  }
+
+  async function saveUserProfile() {
+    if (!userId) {
+      setMessage('Primero inicia sesión.')
+      return
+    }
+
+    setActionLoading(true)
+    setMessage('')
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const currentMetadata = sessionData.session?.user.user_metadata || {}
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        ...currentMetadata,
+        erp_nombre: profileForm.nombre.trim(),
+        erp_cargo: profileForm.cargo.trim() || 'Representante comercial',
+        erp_email_comercial: profileForm.email.trim() || userEmail,
+        erp_fono: profileForm.fono.trim(),
+        erp_celular: profileForm.celular.trim(),
+      },
+    })
+
+    setActionLoading(false)
+
+    if (error) {
+      setMessage(`No se pudo guardar el perfil comercial: ${error.message}`)
+      return
+    }
+
+    setMessage('Perfil comercial guardado. Se usará en los próximos presupuestos y cotizaciones.')
+    window.dispatchEvent(new CustomEvent('erp-company-updated'))
+    await load()
+  }
+
   async function uploadLogo(file: File) {
     if (!activeEmpresaId) {
       setMessage('Selecciona una empresa activa antes de subir logo.')
@@ -389,8 +443,8 @@ export function SupabaseSetup() {
     <div className="mx-auto max-w-5xl pb-8">
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-slate-950">Supabase</h2>
-          <p className="mt-2 text-slate-600">Conexión, sesión y empresas del ERP.</p>
+          <h2 className="text-3xl font-bold text-slate-950">Configuración</h2>
+          <p className="mt-2 text-slate-600">Perfil comercial, sesión y datos de la empresa.</p>
         </div>
 
         <button
@@ -528,6 +582,51 @@ export function SupabaseSetup() {
       </div>
 
       <Card className="mt-6">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <UserRound size={20} className="text-blue-700" />
+            <h3 className="text-lg font-bold text-slate-950">Mi Perfil Comercial</h3>
+          </div>
+          <div className="text-sm text-slate-500">Usuario conectado: {userEmail || 'sin sesión'}</div>
+        </div>
+
+        <p className="mb-4 text-sm text-slate-600">
+          Estos datos pertenecen al usuario conectado y aparecerán como representante comercial en sus documentos.
+        </p>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Nombre del representante
+            <input className="rounded border border-slate-300 px-3 py-3 font-normal" placeholder="Nombre y apellido" value={profileForm.nombre} onChange={(event) => updateProfileForm('nombre', event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Cargo
+            <input className="rounded border border-slate-300 px-3 py-3 font-normal" placeholder="Representante comercial" value={profileForm.cargo} onChange={(event) => updateProfileForm('cargo', event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Correo comercial
+            <input type="email" className="rounded border border-slate-300 px-3 py-3 font-normal" placeholder={userEmail} value={profileForm.email} onChange={(event) => updateProfileForm('email', event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Fono
+            <input inputMode="tel" className="rounded border border-slate-300 px-3 py-3 font-normal" placeholder="Ej.: 22 123 4567" value={profileForm.fono} onChange={(event) => updateProfileForm('fono', event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Celular
+            <input inputMode="tel" className="rounded border border-slate-300 px-3 py-3 font-normal" placeholder="Ej.: +56 9 1234 5678" value={profileForm.celular} onChange={(event) => updateProfileForm('celular', event.target.value)} />
+          </label>
+        </div>
+
+        <button
+          onClick={saveUserProfile}
+          disabled={!userId || actionLoading}
+          className="mt-4 rounded bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
+        >
+          Guardar mi perfil comercial
+        </button>
+      </Card>
+
+      <Card className="mt-6">
         <div className="mb-4 flex items-center gap-2">
           <Building2 size={20} className="text-blue-700" />
           <h3 className="text-lg font-bold text-slate-950">Crear Otra Empresa</h3>
@@ -585,7 +684,7 @@ export function SupabaseSetup() {
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Building2 size={20} className="text-emerald-700" />
-            <h3 className="text-lg font-bold text-slate-950">Datos Para Cotizaciones</h3>
+            <h3 className="text-lg font-bold text-slate-950">Datos Generales de la Empresa</h3>
           </div>
           <div className="text-sm text-slate-500">
             {activeEmpresa ? activeEmpresa.nombre : 'Sin empresa activa'}
@@ -640,11 +739,11 @@ export function SupabaseSetup() {
           <input className="rounded border border-slate-300 px-3 py-3 md:col-span-2" placeholder="Dirección" value={brandingForm.direccion} onChange={(event) => updateBrandingForm('direccion', event.target.value)} />
           <input className="rounded border border-slate-300 px-3 py-3" placeholder="Sitio web" value={brandingForm.website} onChange={(event) => updateBrandingForm('website', event.target.value)} />
           <input className="rounded border border-slate-300 px-3 py-3" placeholder="Descripción corta / giro" value={brandingForm.descripcion_corta} onChange={(event) => updateBrandingForm('descripcion_corta', event.target.value)} />
-          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Nombre firma" value={brandingForm.firma_nombre} onChange={(event) => updateBrandingForm('firma_nombre', event.target.value)} />
-          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Cargo firma" value={brandingForm.firma_cargo} onChange={(event) => updateBrandingForm('firma_cargo', event.target.value)} />
-          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Email firma" value={brandingForm.firma_email} onChange={(event) => updateBrandingForm('firma_email', event.target.value)} />
-          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Teléfono firma" value={brandingForm.firma_telefono} onChange={(event) => updateBrandingForm('firma_telefono', event.target.value)} />
-          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Celular firma" value={brandingForm.firma_celular} onChange={(event) => updateBrandingForm('firma_celular', event.target.value)} />
+          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Nombre firma predeterminado" value={brandingForm.firma_nombre} onChange={(event) => updateBrandingForm('firma_nombre', event.target.value)} />
+          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Cargo firma predeterminado" value={brandingForm.firma_cargo} onChange={(event) => updateBrandingForm('firma_cargo', event.target.value)} />
+          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Email firma predeterminado" value={brandingForm.firma_email} onChange={(event) => updateBrandingForm('firma_email', event.target.value)} />
+          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Fono firma predeterminado" value={brandingForm.firma_telefono} onChange={(event) => updateBrandingForm('firma_telefono', event.target.value)} />
+          <input className="rounded border border-slate-300 px-3 py-3" placeholder="Celular firma predeterminado" value={brandingForm.firma_celular} onChange={(event) => updateBrandingForm('firma_celular', event.target.value)} />
           <input className="rounded border border-slate-300 px-3 py-3" placeholder="URL logo externa" value={brandingForm.logo_url} onChange={(event) => updateBrandingForm('logo_url', event.target.value)} />
           <textarea className="min-h-28 rounded border border-slate-300 px-3 py-3 md:col-span-2" placeholder="Observaciones por defecto" value={brandingForm.observaciones_default} onChange={(event) => updateBrandingForm('observaciones_default', event.target.value)} />
           <textarea className="min-h-24 rounded border border-slate-300 px-3 py-3 md:col-span-2" placeholder="Condiciones por defecto" value={brandingForm.condiciones_default} onChange={(event) => updateBrandingForm('condiciones_default', event.target.value)} />
@@ -655,7 +754,7 @@ export function SupabaseSetup() {
           disabled={!activeEmpresaId || actionLoading}
           className="mt-4 rounded bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
         >
-          Guardar datos para cotizaciones
+          Guardar datos de la empresa
         </button>
       </Card>
     </div>

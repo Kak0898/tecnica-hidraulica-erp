@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, ChevronDown, ClipboardCheck, FileSpreadsheet, Gauge, HardHat, LogOut, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, HardHat, LogOut, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { supabase } from '../lib/supabase';
 
@@ -15,6 +15,7 @@ const groups = [
     label: 'Comercial',
     items: [
       { key: 'clientes', label: 'Clientes', icon: UsersRound },
+      { key: 'presupuestos', label: 'Presupuestos', icon: FileText },
       { key: 'cotizaciones', label: 'Cotizaciones', icon: ReceiptText },
       { key: 'ordenes', label: 'Órdenes de trabajo', icon: Wrench },
       { key: 'crm', label: 'CRM', icon: Building2 },

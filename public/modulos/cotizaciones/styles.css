@@ -34,6 +34,12 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .dot{width:9px;height:9px;border-radius:50%;background:#9ca3af;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}
 .action-message{border:1px solid #b7e4c7;background:#ecfdf3;color:#14532d;border-radius:12px;padding:12px 14px;margin:10px 0;font-size:14px;line-height:1.35}
 .action-message b{display:block}
+.origin-box{margin:14px 0 18px;border:1px solid #bdd0ee;border-radius:14px;padding:14px;background:#f5f9ff}
+.origin-title{font-size:14px;font-weight:900;color:var(--azul);margin-bottom:10px}
+.origin-summary{border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.4}
+.origin-summary.linked{background:#e8f7ee;color:#14532d;border:1px solid #b7e4c7}
+.origin-summary.independent{background:#fff8e6;color:#7c4a03;border:1px solid #f3d58c}
+.saved-origin{display:block;margin-top:4px;font-size:11px;font-weight:700;color:#526176}
 .busy-overlay{position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.38);display:flex;align-items:center;justify-content:center;padding:20px}
 .busy-box{width:min(420px,100%);background:white;border:1px solid #dbe4f0;border-radius:16px;padding:22px;text-align:center;box-shadow:0 20px 60px rgba(15,23,42,.25)}
 .busy-box b{display:block;color:var(--azul);font-size:18px;line-height:1.25;margin:10px 0 6px}

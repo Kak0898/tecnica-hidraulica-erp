@@ -1,6 +1,10 @@
 # Cotizaciones ERP
 
-Modulo estatico incorporado al ERP para crear presupuestos y emitir cotizaciones.
+Modulo estático incorporado al ERP con flujos separados para presupuestos y cotizaciones.
+
+- `/modulos/cotizaciones/index.html?modo=presupuesto`: crea y administra presupuestos.
+- `/modulos/cotizaciones/index.html?modo=cotizacion`: crea cotizaciones independientes o vinculadas a un presupuesto guardado.
+- El vínculo al presupuesto y el perfil comercial del usuario quedan guardados en los datos del documento y en la metadata autenticada de Supabase.
 
 ## Ubicacion
 
