@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Banknote, Calculator, CheckCircle2, Clock3, Download, ExternalLink, FileText, Printer, RefreshCw, RotateCcw, Trash2, UserMinus, UserPlus, WalletCards } from 'lucide-react'
 import { Card } from '../components/Card'
 import { supabase } from '../lib/supabase'
@@ -263,6 +263,8 @@ export function PersonasPagos() {
   const [documentoForm, setDocumentoForm] = useState(emptyDocumento)
   const [sueldoForm, setSueldoForm] = useState(emptySueldo)
   const [horaExtraForm, setHoraExtraForm] = useState(emptyHoraExtra)
+  const [liquidacionPreview, setLiquidacionPreview] = useState<{ html: string; filename: string } | null>(null)
+  const liquidacionFrameRef = useRef<HTMLIFrameElement>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -507,7 +509,6 @@ export function PersonasPagos() {
         </style>
       </head>
       <body>
-        <button onclick="window.print()">Imprimir / PDF</button>
         <h1>Liquidación de Remuneraciones</h1>
         <div class="muted">Periodo ${sueldoForm.periodo}</div>
         <div class="box">
@@ -554,13 +555,27 @@ export function PersonasPagos() {
       </body>
       </html>`
 
-    const win = window.open('', '_blank', 'noopener,noreferrer')
-    if (!win) {
-      setMessage('El navegador bloqueó la ventana de liquidación.')
+    setLiquidacionPreview({
+      html,
+      filename: `liquidacion-${persona.nombre.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, '-')}-${sueldoForm.periodo}.html`,
+    })
+    setMessage('Liquidación generada. Revísala y usa Imprimir / PDF para guardarla.')
+  }
+
+  function imprimirLiquidacion() {
+    const contentWindow = liquidacionFrameRef.current?.contentWindow
+    if (!contentWindow) {
+      setMessage('La vista de la liquidación todavía se está preparando. Intenta nuevamente.')
       return
     }
-    win.document.write(html)
-    win.document.close()
+    contentWindow.focus()
+    contentWindow.print()
+  }
+
+  function descargarLiquidacion() {
+    if (!liquidacionPreview) return
+    downloadText(liquidacionPreview.filename, liquidacionPreview.html, 'text/html;charset=utf-8')
+    setMessage('Archivo de liquidación descargado.')
   }
 
   async function savePersona() {
@@ -1300,6 +1315,24 @@ export function PersonasPagos() {
           </Card>
         </div>
       </div>
+
+      {liquidacionPreview && <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6">
+        <button className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" aria-label="Cerrar vista de liquidación" onClick={() => setLiquidacionPreview(null)} />
+        <section role="dialog" aria-modal="true" aria-label="Vista previa de liquidación" className="relative flex h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <h3 className="text-lg font-black text-slate-950">Liquidación generada</h3>
+              <p className="text-sm text-slate-500">Revisa los datos antes de imprimir o guardar como PDF.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={descargarLiquidacion} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700"><Download size={17} /> Descargar respaldo</button>
+              <button onClick={imprimirLiquidacion} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"><Printer size={17} /> Imprimir / PDF</button>
+              <button onClick={() => setLiquidacionPreview(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cerrar</button>
+            </div>
+          </header>
+          <iframe ref={liquidacionFrameRef} title="Liquidación de remuneraciones" srcDoc={liquidacionPreview.html} className="min-h-0 flex-1 bg-white" />
+        </section>
+      </div>}
     </div>
   )
 }
