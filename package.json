@@ -1,0 +1,30 @@
+{
+  "name": "tecnica-hidraulica-erp",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npx vite build && npx vite build --ssr worker/index.ts --outDir dist/server --emptyOutDir false",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "latest",
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "^3.8.1",
+    "tesseract.js": "^7.0.0",
+    "typescript": "latest",
+    "vite": "latest",
+    "xlsx": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "latest",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest"
+  }
+}
