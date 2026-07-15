@@ -108,3 +108,5 @@ Para habilitar administradores y permisos individuales por sección, ejecuta:
 `15_usuarios_permisos_modulos.sql`
 
 Ese patch es no destructivo. Agrega la pantalla de usuarios, permisos por empresa y protección RLS para que cada cuenta solo pueda leer o modificar los módulos autorizados. La cuenta `usuario.general@tecnicahidraulica.cl` queda como administradora cuando ya pertenece a la empresa.
+
+El mismo archivo también recupera automáticamente las tablas de horas extra y Google Ads si el parche 10 no alcanzó a ejecutarse. Se puede volver a ejecutar después de un error sin eliminar registros existentes.
