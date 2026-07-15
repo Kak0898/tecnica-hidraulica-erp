@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 
 type SparePartRow = {
   id?: string
@@ -36,6 +37,8 @@ export function Repuestos() {
   const [items, setItems] = useState<SparePartRow[]>([])
   const [form, setForm] = useState<SparePartRow>(emptyForm)
   const [editingCode, setEditingCode] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
 
   async function load() {
     const { data, error } = await supabase
@@ -44,7 +47,7 @@ export function Repuestos() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       return
     }
 
@@ -56,13 +59,16 @@ export function Repuestos() {
   }, [])
 
   async function save() {
-    if (!form.code || !form.name) {
-      return alert('Falta código y nombre')
+    if (!form.code.trim() || !form.name.trim()) {
+      setMessage('Ingresa el código y el nombre del repuesto.')
+      return
     }
 
+    setSaving(true)
+    setMessage('')
     const payload = {
-      code: form.code,
-      name: form.name,
+      code: form.code.trim(),
+      name: form.name.trim(),
       brand: form.brand || '',
       category: form.category || '',
       location: form.location || '',
@@ -77,17 +83,17 @@ export function Repuestos() {
     const { error } = await supabase
       .from('spare_parts')
       .upsert(payload, { onConflict: 'empresa_id,code' })
+    setSaving(false)
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       return
     }
 
     setForm(emptyForm)
     setEditingCode(null)
-    load()
-
-    alert(editingCode ? 'Repuesto actualizado correctamente' : 'Repuesto guardado correctamente')
+    await load()
+    setMessage(editingCode ? 'Repuesto actualizado correctamente.' : 'Repuesto guardado correctamente.')
   }
 
   function editarRepuesto(repuesto: SparePartRow) {
@@ -128,12 +134,12 @@ export function Repuestos() {
     const { error } = await query
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       return
     }
 
     setItems(items.filter((item) => repuesto.id ? item.id !== repuesto.id : item.code !== repuesto.code))
-    alert('Repuesto eliminado correctamente')
+    setMessage('Repuesto eliminado correctamente.')
   }
 
   return (
@@ -144,6 +150,8 @@ export function Repuestos() {
           <Download size={17} /> Descargar formato inventario repuestos
         </a>
       </div>
+
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <Card>
         <div className="grid md:grid-cols-4 gap-3 mb-4">
@@ -230,9 +238,10 @@ export function Repuestos() {
 
           <button
             onClick={save}
-            className="bg-blue-600 text-white rounded px-4 py-3"
+            disabled={saving}
+            className="bg-blue-600 text-white rounded px-4 py-3 disabled:opacity-50"
           >
-            {editingCode ? 'Actualizar' : 'Guardar'}
+            {saving ? 'Guardando...' : editingCode ? 'Actualizar' : 'Guardar'}
           </button>
 
           {editingCode && (

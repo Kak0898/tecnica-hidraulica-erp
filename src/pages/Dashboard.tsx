@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 import {
   BarChart,
   Bar,
@@ -199,6 +200,7 @@ export function Dashboard() {
   const [machines, setMachines] = useState<MachineRow[]>([])
   const [spareParts, setSpareParts] = useState<SparePartRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
 
   async function load() {
     setLoading(true)
@@ -209,7 +211,7 @@ export function Dashboard() {
       .order('created_at', { ascending: false })
 
     if (machinesError) {
-      alert(machinesError.message)
+      setMessage(machinesError.message)
       setLoading(false)
       return
     }
@@ -220,7 +222,7 @@ export function Dashboard() {
       .order('created_at', { ascending: false })
 
     if (sparePartsError) {
-      alert(sparePartsError.message)
+      setMessage(sparePartsError.message)
       setLoading(false)
       return
     }
@@ -345,6 +347,7 @@ export function Dashboard() {
 
   return (
     <div>
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase text-blue-700">Técnica Hidráulica ERP</p>
@@ -403,7 +406,7 @@ export function Dashboard() {
 
           <div className="h-80 min-h-80">
             {stats.marcasData.length ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200} initialDimension={{ width: 480, height: 320 }}>
                 <BarChart data={stats.marcasData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tickFormatter={compactName} />
@@ -421,7 +424,7 @@ export function Dashboard() {
 
           <div className="h-80 min-h-80">
             {stats.disponibilidadData.length ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200} initialDimension={{ width: 480, height: 320 }}>
                 <PieChart>
                   <Pie
                     data={stats.disponibilidadData}
@@ -470,7 +473,7 @@ export function Dashboard() {
 
           <div className="h-80 min-h-80">
             {stats.tiposData.length ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200} initialDimension={{ width: 640, height: 320 }}>
                 <BarChart data={stats.tiposData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tickFormatter={compactName} />
@@ -505,7 +508,7 @@ export function Dashboard() {
 
           <div className="mt-6 h-56 min-h-56">
             {stats.estadoFisicoData.length ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200} initialDimension={{ width: 480, height: 224 }}>
                 <PieChart>
                   <Pie data={stats.estadoFisicoData} dataKey="cantidad" nameKey="estado" outerRadius={80} label>
                     {stats.estadoFisicoData.map((_, index) => (
@@ -554,7 +557,7 @@ export function Dashboard() {
 
           <div className="h-72 min-h-72">
             {stats.categoriasData.length ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200} initialDimension={{ width: 480, height: 288 }}>
                 <BarChart data={stats.categoriasData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tickFormatter={compactName} />

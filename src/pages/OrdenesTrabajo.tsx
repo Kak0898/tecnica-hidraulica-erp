@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ClipboardList, FileText, RefreshCw, Wrench } from 'lucide-react'
+import { Ban, ClipboardList, FileText, RefreshCw, Wrench } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
@@ -67,6 +67,8 @@ export function OrdenesTrabajo() {
   const [form, setForm] = useState({ ...emptyForm, folio: nextManualFolio() })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [cancellingId, setCancellingId] = useState('')
+  const [confirmingCancelId, setConfirmingCancelId] = useState('')
   const [message, setMessage] = useState('')
 
   async function load() {
@@ -115,6 +117,10 @@ export function OrdenesTrabajo() {
   async function createManual() {
     if (!form.folio.trim()) {
       setMessage('Ingresa un folio para la OT.')
+      return
+    }
+    if (!form.titulo.trim() && !form.descripcion_problema.trim()) {
+      setMessage('Ingresa un título o describe el trabajo antes de crear la OT.')
       return
     }
 
@@ -167,6 +173,25 @@ export function OrdenesTrabajo() {
 
     setSelectedDoc('')
     setMessage('OT creada o recuperada desde la cotización.')
+    await load()
+  }
+
+  async function cancelOrder(order: OrdenTrabajo) {
+    setCancellingId(order.id)
+    setConfirmingCancelId('')
+    setMessage('')
+    const { error } = await supabase
+      .from('ordenes_trabajo')
+      .update({ estado: 'cancelada' })
+      .eq('id', order.id)
+    setCancellingId('')
+
+    if (error) {
+      setMessage(error.message)
+      return
+    }
+
+    setMessage(`Orden ${order.folio} cancelada.`)
     await load()
   }
 
@@ -255,6 +280,7 @@ export function OrdenesTrabajo() {
                   <th className="py-3">Equipo</th>
                   <th className="py-3">Estado</th>
                   <th className="py-3">Prioridad</th>
+                  <th className="py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -268,6 +294,37 @@ export function OrdenesTrabajo() {
                     <td className="py-3">{orden.machines ? `${orden.machines.code} · ${orden.machines.name}` : '-'}</td>
                     <td className="py-3"><span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{orden.estado.replace(/_/g, ' ')}</span></td>
                     <td className="py-3">{orden.prioridad}</td>
+                    <td className="py-3 text-right">
+                      {!['cancelada', 'cerrada'].includes(orden.estado) ? (
+                        confirmingCancelId === orden.id ? (
+                          <div className="inline-flex flex-wrap justify-end gap-2">
+                            <button
+                              onClick={() => void cancelOrder(orden)}
+                              disabled={cancellingId === orden.id}
+                              aria-label={`Confirmar cancelación ${orden.folio}`}
+                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              {cancellingId === orden.id ? 'Cancelando...' : 'Confirmar cancelación'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmingCancelId('')}
+                              aria-label={`Mantener ${orden.folio}`}
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
+                            >
+                              Mantener OT
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingCancelId(orden.id)}
+                            aria-label={`Cancelar ${orden.folio}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700"
+                          >
+                            <Ban size={14} /> Cancelar
+                          </button>
+                        )
+                      ) : <span className="text-xs text-slate-400">Sin acciones</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

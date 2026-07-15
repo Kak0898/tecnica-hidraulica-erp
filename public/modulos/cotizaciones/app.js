@@ -887,6 +887,29 @@ async function selectBudgetForQuote(value){
 
 async function saveDoc(){
   if (savingDoc) return;
+  const clientName = String(state.cliente || '').trim();
+  const documentItems = (state.referencias || []).flatMap(ref => ref.items || []);
+  const completedItems = documentItems.filter(item => String(item.descripcion || '').trim());
+  const pricedItems = completedItems.filter(item => Number(item.cantidad) > 0 && Number(item.precio) > 0);
+
+  if (!clientName) {
+    saveStatus = { type:'bad', text:`Ingresa el cliente antes de guardar ${isQuoteDoc() ? 'la cotización' : 'el presupuesto'}.` };
+    actionMessage = '';
+    render({preserveScroll:true});
+    return;
+  }
+  if (!completedItems.length) {
+    saveStatus = { type:'bad', text:'Agrega al menos un ítem con descripción antes de guardar.' };
+    actionMessage = '';
+    render({preserveScroll:true});
+    return;
+  }
+  if (!pricedItems.length) {
+    saveStatus = { type:'bad', text:'Completa una cantidad y un precio mayor que cero en al menos un ítem.' };
+    actionMessage = '';
+    render({preserveScroll:true});
+    return;
+  }
   savingDoc = true;
   busyMessage = isQuoteDoc()
     ? 'Guardando cotización final...'

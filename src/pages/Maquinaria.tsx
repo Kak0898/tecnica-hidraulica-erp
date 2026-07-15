@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Camera, Download, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
+import { FeedbackToast } from '../components/FeedbackToast'
 
 type MachineRow = {
   id?: string
@@ -286,8 +287,10 @@ export function Maquinaria() {
   const [searchMarca, setSearchMarca] = useState('')
   const [searchTipo, setSearchTipo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrText, setOcrText] = useState('')
+  const [message, setMessage] = useState('')
 
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
 
@@ -322,7 +325,7 @@ export function Maquinaria() {
     const { data, error, count } = await query.range(from, to)
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       setItems([])
       setTotalRows(0)
       setLoading(false)
@@ -411,7 +414,7 @@ export function Maquinaria() {
         ...identificador,
       })
     } catch (error: any) {
-      alert(error.message)
+      setMessage(error.message)
       setForm(emptyForm)
     }
 
@@ -422,6 +425,8 @@ export function Maquinaria() {
   }
 
   async function save() {
+    setSaving(true)
+    setMessage('')
     let formToSave = form
 
     if (!editingCode) {
@@ -433,7 +438,8 @@ export function Maquinaria() {
         }
         setForm(formToSave)
       } catch (error: any) {
-        alert(error.message)
+        setSaving(false)
+        setMessage(error.message)
         return
       }
     }
@@ -442,7 +448,9 @@ export function Maquinaria() {
     const name = generarNombre(formToSave)
 
     if (!code || !name) {
-      return alert('Falta código/conteo y nombre o datos de la máquina')
+      setSaving(false)
+      setMessage('Ingresa el nombre o al menos marca, modelo, tipo o serie de la máquina.')
+      return
     }
 
     const payload = {
@@ -479,18 +487,18 @@ export function Maquinaria() {
         : await supabase
           .from('machines')
           .insert(payload)
+    setSaving(false)
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       return
     }
 
     setForm(emptyForm)
     setEditingCode(null)
     setShowForm(false)
-    load(page, searchSerie, searchMarca, searchTipo)
-
-    alert(editingCode ? 'Maquinaria actualizada correctamente' : 'Maquinaria guardada correctamente')
+    await load(page, searchSerie, searchMarca, searchTipo)
+    setMessage(editingCode ? 'Maquinaria actualizada correctamente.' : 'Maquinaria guardada correctamente.')
   }
 
   function editarMaquina(machine: MachineRow) {
@@ -579,10 +587,10 @@ export function Maquinaria() {
       }))
 
       if (!detected.serial && !detected.altura && !detected.largo) {
-        alert('No pude detectar serie, altura o largo en la imagen. Puedes ingresarlos manualmente.')
+        setMessage('No pude detectar serie, altura o largo en la imagen. Puedes ingresarlos manualmente.')
       }
     } catch (error: any) {
-      alert(error.message || 'No se pudo analizar la imagen')
+      setMessage(error.message || 'No se pudo analizar la imagen')
     } finally {
       if (worker) {
         await worker.terminate()
@@ -606,15 +614,15 @@ export function Maquinaria() {
     const { error } = await query
 
     if (error) {
-      alert(error.message)
+      setMessage(error.message)
       return
     }
 
-    load(page, searchSerie, searchMarca, searchTipo)
+    await load(page, searchSerie, searchMarca, searchTipo)
     if (selectedMachine?.id === machine.id || selectedMachine?.code === machine.code) {
       setSelectedMachine(null)
     }
-    alert('Maquinaria eliminada correctamente')
+    setMessage('Maquinaria eliminada correctamente.')
   }
 
   return (
@@ -625,6 +633,8 @@ export function Maquinaria() {
           <Download size={17} /> Descargar formato inventario maquinaria
         </a>
       </div>
+
+      <FeedbackToast message={message} onClose={() => setMessage('')} />
 
       <Card>
         <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -871,9 +881,10 @@ export function Maquinaria() {
 
               <button
                 onClick={save}
-                className="rounded bg-blue-600 px-4 py-3 text-white"
+                disabled={saving}
+                className="rounded bg-blue-600 px-4 py-3 text-white disabled:opacity-50"
               >
-                {editingCode ? 'Actualizar' : 'Guardar'}
+                {saving ? 'Guardando...' : editingCode ? 'Actualizar' : 'Guardar'}
               </button>
 
               <button

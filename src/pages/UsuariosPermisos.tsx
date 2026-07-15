@@ -44,6 +44,13 @@ function permissionsError(error: { code?: string; message?: string } | null) {
 
 async function functionErrorMessage(error: unknown) {
   const fallback = error instanceof Error ? error.message : 'No fue posible crear la cuenta.'
+  const errorName = (error as { name?: string } | null)?.name || ''
+  if (
+    /FunctionsFetchError/i.test(errorName)
+    || /Failed to send a request to the Edge Function|Failed to fetch/i.test(fallback)
+  ) {
+    return 'No se pudo contactar la función segura crear-usuario-empresa. Debe desplegarse en Supabase antes de crear cuentas.'
+  }
   const context = (error as { context?: Response } | null)?.context
   if (!context) return fallback
 
