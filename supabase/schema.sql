@@ -1719,7 +1719,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $function$
+as '
   with membership as (
     select ue.rol
     from public.usuarios_empresas ue
@@ -1741,14 +1741,14 @@ as $function$
       from (
         select
           membership.rol,
-          membership.rol in ('owner', 'admin') as is_admin,
+          membership.rol in (''owner'', ''admin'') as is_admin,
           case
-            when membership.rol in ('owner', 'admin') then array[
-              'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
-              'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
-              'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
-              'repuestos', 'epp_ropa', 'auditorias', 'importar_excel',
-              'ia', 'configuracion', 'usuarios_permisos'
+            when membership.rol in (''owner'', ''admin'') then array[
+              ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
+              ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
+              ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
+              ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'',
+              ''ia'', ''configuracion'', ''usuarios_permisos''
             ]::text[]
             else permission_list.modulos
           end as modulos
@@ -1764,7 +1764,7 @@ as $function$
       false as is_admin,
       array[]::text[] as modulos
   ) empty_result
-$function$;
+';
 
 create or replace function public.listar_usuarios_empresa(p_empresa_id uuid)
 returns table (
@@ -1778,19 +1778,19 @@ language sql
 stable
 security definer
 set search_path = public, auth
-as $function$
+as '
   select
     ue.user_id,
     au.email::text,
     ue.rol,
     ue.activo,
     case
-      when ue.rol in ('owner', 'admin') then array[
-        'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
-        'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
-        'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
-        'repuestos', 'epp_ropa', 'auditorias', 'importar_excel',
-        'ia', 'configuracion', 'usuarios_permisos'
+      when ue.rol in (''owner'', ''admin'') then array[
+        ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
+        ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
+        ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
+        ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'',
+        ''ia'', ''configuracion'', ''usuarios_permisos''
       ]::text[]
       else coalesce((
         select array_agg(up.modulo order by up.modulo)
@@ -1805,9 +1805,9 @@ as $function$
   where ue.empresa_id = p_empresa_id
     and public.is_empresa_admin(p_empresa_id)
   order by
-    case ue.rol when 'owner' then 0 when 'admin' then 1 else 2 end,
+    case ue.rol when ''owner'' then 0 when ''admin'' then 1 else 2 end,
     lower(au.email)
-$function$;
+';
 
 create or replace function public.guardar_permisos_usuario(
   p_empresa_id uuid,
@@ -1819,12 +1819,12 @@ returns uuid
 language sql
 security definer
 set search_path = public, auth
-as $function$
+as '
   with target as (
     select au.id as user_id
     from auth.users au
-    where lower(au.email) = lower(trim(coalesce(p_email, '')))
-      and p_rol = any(array['admin', 'operador']::text[])
+    where lower(au.email) = lower(trim(coalesce(p_email, '''')))
+      and p_rol = any(array[''admin'', ''operador'']::text[])
       and public.is_empresa_admin(p_empresa_id)
     limit 1
   ),
@@ -1837,18 +1837,18 @@ as $function$
         where ue.empresa_id = p_empresa_id
           and ue.user_id = target.user_id
         limit 1
-      ), '') as existing_role
+      ), '''') as existing_role
     from target
   ),
   authorized as (
     select
       prepared.user_id,
-      case when prepared.existing_role = 'owner' then 'owner' else p_rol end as requested_role
+      case when prepared.existing_role = ''owner'' then ''owner'' else p_rol end as requested_role
     from prepared
     where not (
       prepared.user_id = auth.uid()
-      and prepared.existing_role = any(array['owner', 'admin']::text[])
-      and p_rol <> 'admin'
+      and prepared.existing_role = any(array[''owner'', ''admin'']::text[])
+      and p_rol <> ''admin''
     )
   ),
   membership_write as (
@@ -1872,15 +1872,15 @@ as $function$
       membership_write.user_id,
       module_catalog.modulo,
       case
-        when membership_write.rol in ('owner', 'admin') then false
+        when membership_write.rol in (''owner'', ''admin'') then false
         else module_catalog.modulo = any(coalesce(p_modulos, array[]::text[]))
       end
     from membership_write
     cross join unnest(array[
-      'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
-      'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
-      'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
-      'repuestos', 'epp_ropa', 'auditorias', 'importar_excel', 'ia'
+      ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
+      ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
+      ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
+      ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'', ''ia''
     ]::text[]) as module_catalog(modulo)
     on conflict (empresa_id, user_id, modulo) do update
       set permitido = excluded.permitido,
@@ -1899,7 +1899,7 @@ as $function$
   where (select count(*) from permission_write) >= 0
     and (select count(*) from company_write) >= 0
   limit 1
-$function$;
+';
 
 create or replace function public.cambiar_estado_usuario_empresa(
   p_empresa_id uuid,
@@ -1910,7 +1910,7 @@ returns boolean
 language sql
 security definer
 set search_path = public
-as $function$
+as '
   with updated as (
     update public.usuarios_empresas ue
     set activo = p_activo,
@@ -1919,11 +1919,11 @@ as $function$
       and ue.user_id = p_user_id
       and public.is_empresa_admin(p_empresa_id)
       and (p_activo or p_user_id <> auth.uid())
-      and (p_activo or ue.rol <> 'owner')
+      and (p_activo or ue.rol <> ''owner'')
     returning true as changed
   )
   select exists(select 1 from updated)
-$function$;
+';
 
 -- usuario.general administra los permisos cuando ya pertenece a la empresa.
 update public.usuarios_empresas ue
