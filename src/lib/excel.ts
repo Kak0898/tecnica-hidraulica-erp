@@ -390,13 +390,32 @@ function codigoEpp(category: unknown, name: unknown, talla: unknown, color: unkn
   return identity ? `EPP-${identity}` : ''
 }
 
+function normalizarEstadoEpp(value: unknown, stock: number) {
+  const estado = limpiarClave(texto(value))
+
+  if (!estado) return stock > 0 ? 'disponible' : 'agotado'
+  if (estado.includes('agotad') || estado.includes('sinstock') || estado.includes('quiebre')) return 'agotado'
+  if (estado.includes('reservad') || estado.includes('apartad')) return 'reservado'
+  if (estado.includes('entregad') || estado.includes('asignad') || estado.includes('usad')) return 'entregado'
+  if (estado.includes('baja') || estado.includes('desech') || estado.includes('malestado')) return 'baja'
+  if (
+    estado.includes('disponible') ||
+    estado.includes('nuevo') ||
+    estado.includes('nueva') ||
+    estado.includes('stock') ||
+    estado.includes('buenestado')
+  ) return stock > 0 ? 'disponible' : 'agotado'
+
+  return stock > 0 ? 'disponible' : 'agotado'
+}
+
 export function normalizeEppRow(row: any): EppImportRow {
   const category = texto(get(row, ['CATEGORÍA', 'CATEGORIA', 'CATEGORY', 'categoría', 'categoria', 'category']))
   const talla = texto(get(row, ['TALLA', 'talla']))
   const color = texto(get(row, ['COLOR', 'color']))
   const name = texto(get(row, ['NOMBRE', 'NAME', 'ARTÍCULO', 'ARTICULO', 'nombre', 'name', 'artículo', 'articulo'])) || category
   const stock = cantidadEpp(get(row, ['CANTIDAD', 'CANT. DISPONIBLE', 'CANT DISPONIBLE', 'STOCK', 'cantidad', 'cant. disponible', 'cant disponible', 'stock']))
-  const rawEstado = texto(get(row, ['ESTADO', 'estado'])).toLowerCase()
+  const rawEstado = get(row, ['ESTADO', 'estado'])
 
   return {
     code: texto(get(row, ['CÓDIGO', 'CODIGO', 'CODE', 'código', 'codigo', 'code'])) || codigoEpp(category, name, talla, color),
@@ -407,7 +426,7 @@ export function normalizeEppRow(row: any): EppImportRow {
     stock,
     min_stock: cantidadEpp(get(row, ['STOCK MÍNIMO', 'STOCK MINIMO', 'MÍNIMO', 'MINIMO', 'stock mínimo', 'stock minimo', 'mínimo', 'minimo'])),
     location: texto(get(row, ['UBICACIÓN', 'UBICACION', 'LOCATION', 'ubicación', 'ubicacion', 'location'])),
-    estado: rawEstado || (stock > 0 ? 'disponible' : 'agotado'),
+    estado: normalizarEstadoEpp(rawEstado, stock),
     notes: texto(get(row, ['OBSERVACIONES', 'NOTAS', 'NOTES', 'observaciones', 'notas', 'notes'])),
   }
 }
@@ -490,6 +509,26 @@ function uniqueBy<T>(rows: T[], keyFor: (row: T) => string) {
   return Array.from(unique.values())
 }
 
+function ensureUniqueEppCodes(rows: EppImportRow[]) {
+  const codeCounts = new Map<string, number>()
+
+  rows.forEach((row) => {
+    const key = row.code.toLocaleUpperCase('es-CL')
+    codeCounts.set(key, (codeCounts.get(key) ?? 0) + 1)
+  })
+
+  return rows.map((row) => {
+    const key = row.code.toLocaleUpperCase('es-CL')
+    if ((codeCounts.get(key) ?? 0) <= 1) return row
+
+    const variant = [row.talla, row.color].map(slug).filter(Boolean).join('-')
+    return {
+      ...row,
+      code: variant ? `${row.code}-${variant}` : codigoEpp(row.category, row.name, row.talla, row.color),
+    }
+  })
+}
+
 export function normalizeEppWorkbook(sheets: ExcelSheetData[]) {
   const inventorySheet = findExcelSheet(sheets, ['epp', 'ropa'], 2)
   const structuredItems = inventorySheet ? parseStructuredEppSheet(inventorySheet.matrix) : []
@@ -502,7 +541,7 @@ export function normalizeEppWorkbook(sheets: ExcelSheetData[]) {
   const workerSizes = sheets.flatMap((sheet) => parseWorkerSizesSheet(sheet.matrix))
 
   return {
-    items: uniqueBy(items, (row) => row.code.toLocaleUpperCase('es-CL')),
+    items: uniqueBy(ensureUniqueEppCodes(items), (row) => row.code.toLocaleUpperCase('es-CL')),
     workerSizes: uniqueBy(workerSizes, (row) => row.nombre.toLocaleUpperCase('es-CL')),
   }
 }
