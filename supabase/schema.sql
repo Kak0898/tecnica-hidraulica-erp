@@ -1729,13 +1729,14 @@ declare
     ''ia'', ''configuracion'', ''usuarios_permisos''
   ];
 begin
-  select ue.rol
-    into v_role
-  from public.usuarios_empresas ue
-  where ue.empresa_id = p_empresa_id
-    and ue.user_id = auth.uid()
-    and ue.activo = true
-  limit 1;
+  v_role := (
+    select ue.rol
+    from public.usuarios_empresas ue
+    where ue.empresa_id = p_empresa_id
+      and ue.user_id = auth.uid()
+      and ue.activo = true
+    limit 1
+  );
 
   if v_role is null then
     return jsonb_build_object(''rol'', null, ''is_admin'', false, ''modulos'', ''[]''::jsonb);
@@ -1746,12 +1747,13 @@ begin
   if v_is_admin then
     module_list := all_modules;
   else
-    select coalesce(array_agg(up.modulo order by up.modulo), array[]::text[])
-      into module_list
-    from public.usuario_permisos up
-    where up.empresa_id = p_empresa_id
-      and up.user_id = auth.uid()
-      and up.permitido = true;
+    module_list := (
+      select coalesce(array_agg(up.modulo order by up.modulo), array[]::text[])
+      from public.usuario_permisos up
+      where up.empresa_id = p_empresa_id
+        and up.user_id = auth.uid()
+        and up.permitido = true
+    );
   end if;
 
   return jsonb_build_object(
@@ -1838,10 +1840,12 @@ begin
     raise exception ''Solo un administrador puede guardar permisos'';
   end if;
 
-  select au.id into target_user_id
-  from auth.users au
-  where lower(au.email) = lower(trim(coalesce(p_email, '''')))
-  limit 1;
+  target_user_id := (
+    select au.id
+    from auth.users au
+    where lower(au.email) = lower(trim(coalesce(p_email, '''')))
+    limit 1
+  );
 
   if target_user_id is null then
     raise exception ''El correo no tiene una cuenta creada en Supabase Auth. Crea primero la cuenta y vuelve a intentarlo'';
@@ -1851,9 +1855,12 @@ begin
     raise exception ''El tipo de acceso debe ser administrador o usuario por módulos'';
   end if;
 
-  select ue.rol into existing_role
-  from public.usuarios_empresas ue
-  where ue.empresa_id = p_empresa_id and ue.user_id = target_user_id;
+  existing_role := (
+    select ue.rol
+    from public.usuarios_empresas ue
+    where ue.empresa_id = p_empresa_id and ue.user_id = target_user_id
+    limit 1
+  );
 
   requested_role := case when existing_role = ''owner'' then ''owner'' else p_rol end;
 
@@ -1918,9 +1925,12 @@ begin
     raise exception ''No puedes desactivar tu propio acceso'';
   end if;
 
-  select ue.rol into target_role
-  from public.usuarios_empresas ue
-  where ue.empresa_id = p_empresa_id and ue.user_id = p_user_id;
+  target_role := (
+    select ue.rol
+    from public.usuarios_empresas ue
+    where ue.empresa_id = p_empresa_id and ue.user_id = p_user_id
+    limit 1
+  );
 
   if target_role = ''owner'' and p_activo = false then
     raise exception ''No se puede desactivar al propietario de la empresa'';
