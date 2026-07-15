@@ -102,3 +102,9 @@ Para habilitar el inventario de EPP, ropa y las tallas de trabajadores, ejecuta:
 `14_epp_ropa_inventario.sql`
 
 Ese patch es no destructivo y agrega inventario por código/categoría/talla/color, alertas de stock mínimo y una ficha de tallas por trabajador.
+
+Para habilitar administradores y permisos individuales por sección, ejecuta:
+
+`15_usuarios_permisos_modulos.sql`
+
+Ese patch es no destructivo. Agrega la pantalla de usuarios, permisos por empresa y protección RLS para que cada cuenta solo pueda leer o modificar los módulos autorizados. La cuenta `usuario.general@tecnicahidraulica.cl` queda como administradora cuando ya pertenece a la empresa.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Maquinaria } from './pages/Maquinaria';
@@ -19,6 +19,17 @@ import { EmpresasAsociadas } from './pages/EmpresasAsociadas';
 import { FlotaVehiculos } from './pages/FlotaVehiculos';
 import { PublicacionesProductos } from './pages/PublicacionesProductos';
 import { EppRopa } from './pages/EppRopa';
+import { UsuariosPermisos } from './pages/UsuariosPermisos';
+import { usePermisos } from './lib/permisos';
+
+function SinModulos() {
+ return <div className="flex min-h-[60vh] items-center justify-center">
+  <div className="max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
+   <h2 className="text-2xl font-black text-amber-950">Sin secciones asignadas</h2>
+   <p className="mt-3 leading-6 text-amber-900">Tu cuenta está activa, pero todavía no tiene secciones habilitadas para esta empresa. Solicita a un administrador que configure tus permisos.</p>
+  </div>
+ </div>
+}
 
 function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
@@ -67,8 +78,15 @@ function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' })
 export default function App(){
  const [page,setPage]=useState('dashboard');
  const { loading, userEmail, activeEmpresa } = useEmpresa()
+ const { loading: permissionsLoading, hasPagePermission, firstAllowedPage } = usePermisos()
 
- if (loading) {
+ useEffect(() => {
+  if (!loading && !permissionsLoading && userEmail && activeEmpresa && !hasPagePermission(page) && firstAllowedPage) {
+   setPage(firstAllowedPage)
+  }
+ }, [activeEmpresa, firstAllowedPage, hasPagePermission, loading, page, permissionsLoading, userEmail])
+
+ if (loading || (userEmail && activeEmpresa && permissionsLoading)) {
   return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
    <div className="text-center">
     <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-blue-400" />
@@ -81,6 +99,10 @@ export default function App(){
 
  if (!activeEmpresa) {
   return <Layout page="supabase" setPage={setPage}><SupabaseSetup /></Layout>
+ }
+
+ if (!hasPagePermission(page)) {
+  return <Layout page={page} setPage={setPage}><SinModulos /></Layout>
  }
 
  return <Layout page={page} setPage={setPage}>
@@ -103,5 +125,6 @@ export default function App(){
   {page==='epp-ropa' && <EppRopa/>}
   {page==='auditorias' && <Auditorias/>}
   {page==='importar' && <Importar/>}
+  {page==='usuarios-permisos' && <UsuariosPermisos/>}
  </Layout>
 }

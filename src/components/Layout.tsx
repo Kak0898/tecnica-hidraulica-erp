@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
+import { usePermisos } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
 
 const groups = [
@@ -39,6 +40,7 @@ const groups = [
   {
     label: 'Sistema',
     items: [
+      { key: 'usuarios-permisos', label: 'Usuarios y permisos', icon: UserCog },
       { key: 'ia', label: 'IA Técnica', icon: Sparkles },
       { key: 'supabase', label: 'Configuración', icon: Settings },
     ],
@@ -47,6 +49,7 @@ const groups = [
 
 export function Layout({ page, setPage, children }: { page: string; setPage: (p:string)=>void; children: ReactNode }) {
   const { loading, userEmail, empresas, activeEmpresa, activeEmpresaId, setEmpresaActiva } = useEmpresa()
+  const { role, isAdmin, hasPagePermission } = usePermisos()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   function navigate(key: string) {
@@ -75,6 +78,7 @@ export function Layout({ page, setPage, children }: { page: string; setPage: (p:
             <Building2 size={16} className="text-cyan-300" />
             <span className="truncate">{loading ? 'Cargando empresa' : activeEmpresa?.nombre || 'Sin empresa'}</span>
           </div>
+          <p className="mt-2 text-[11px] font-semibold text-cyan-300">{isAdmin ? 'Administrador' : role ? 'Acceso por módulos' : 'Sin permisos cargados'}</p>
           {empresas.length > 1 ? (
             <div className="relative mt-3">
               <select className="w-full appearance-none rounded-lg border border-white/10 bg-[#07111f] px-3 py-2 pr-8 text-xs text-white" value={activeEmpresaId} onChange={(event) => setEmpresaActiva(event.target.value)}>
@@ -87,11 +91,13 @@ export function Layout({ page, setPage, children }: { page: string; setPage: (p:
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {groups.map((group) => (
-          <div key={group.label} className="mb-5">
+        {groups.map((group) => {
+          const visibleItems = group.items.filter((item) => hasPagePermission(item.key))
+          if (!visibleItems.length) return null
+          return <div key={group.label} className="mb-5">
             <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{group.label}</p>
             <div className="space-y-1">
-              {group.items.map((item) => {
+              {visibleItems.map((item) => {
                 const Icon = item.icon
                 return <button key={item.key} onClick={() => navigate(item.key)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${page === item.key ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/30' : 'text-slate-300 hover:bg-white/7 hover:text-white'}`}>
                   <Icon size={18} />
@@ -100,7 +106,7 @@ export function Layout({ page, setPage, children }: { page: string; setPage: (p:
               })}
             </div>
           </div>
-        ))}
+        })}
       </nav>
 
       <div className="border-t border-white/10 p-4">
