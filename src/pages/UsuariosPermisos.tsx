@@ -13,12 +13,16 @@ type UserAccess = {
   rol: string
   activo: boolean
   modulos: ModuleKey[]
+  persona_id?: string | null
+  persona_nombre?: string | null
 }
+
+type PersonOption = { id: string; nombre: string; usuario_id?: string | null }
 
 const assignableModules = MODULE_GROUPS.flatMap((group) => group.modules.map((module) => module.key))
 
 const presets: Array<{ label: string; modules: ModuleKey[] }> = [
-  { label: 'RR.HH. y pagos', modules: ['personas_pagos'] },
+  { label: 'RR.HH. y pagos', modules: ['rrhh_personas', 'rrhh_contratos', 'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos'] },
   { label: 'Comercial', modules: ['dashboard', 'clientes', 'presupuestos', 'cotizaciones', 'publicaciones', 'crm', 'whatsapp'] },
   { label: 'Operaciones', modules: ['dashboard', 'ordenes', 'maquinaria', 'repuestos', 'epp_ropa', 'auditorias', 'importar_excel'] },
   { label: 'Marketing', modules: ['dashboard', 'google_ads', 'publicaciones', 'crm', 'whatsapp'] },
@@ -26,6 +30,9 @@ const presets: Array<{ label: string; modules: ModuleKey[] }> = [
 
 function permissionsError(error: { code?: string; message?: string } | null) {
   if (!error) return ''
+  if (/vincular_usuario_persona|rrhh_personas|persona_id|persona_nombre/i.test(error.message || '')) {
+    return 'Falta ejecutar el archivo SQL 17_rrhh_escalable.sql en Supabase.'
+  }
   if (/listar_usuarios_empresa_detalle|actualizar_nombre_usuario_empresa/i.test(error.message || '')) {
     return 'Falta ejecutar el archivo SQL 16_creacion_usuarios_perfiles.sql en Supabase.'
   }
@@ -58,6 +65,7 @@ export function UsuariosPermisos() {
   const { activeEmpresaId, activeEmpresa, userEmail } = useEmpresa()
   const { isAdmin, schemaReady, refreshPermissions } = usePermisos()
   const [users, setUsers] = useState<UserAccess[]>([])
+  const [people, setPeople] = useState<PersonOption[]>([])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [temporaryPassword, setTemporaryPassword] = useState('')
@@ -65,6 +73,7 @@ export function UsuariosPermisos() {
   const [role, setRole] = useState<'admin' | 'operador'>('operador')
   const [selected, setSelected] = useState<Set<ModuleKey>>(new Set())
   const [editingUser, setEditingUser] = useState<UserAccess | null>(null)
+  const [linkedPersonId, setLinkedPersonId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -76,9 +85,12 @@ export function UsuariosPermisos() {
     }
 
     setLoading(true)
-    const { data, error } = await supabase.rpc('listar_usuarios_empresa_detalle', {
-      p_empresa_id: activeEmpresaId,
-    })
+    const [usersResult, peopleResult] = await Promise.all([
+      supabase.rpc('listar_usuarios_empresa_detalle', { p_empresa_id: activeEmpresaId }),
+      supabase.from('personas').select('id, nombre, usuario_id').eq('empresa_id', activeEmpresaId).order('nombre'),
+    ])
+
+    const { data, error } = usersResult
 
     if (error) {
       setMessage(permissionsError(error))
@@ -89,6 +101,8 @@ export function UsuariosPermisos() {
         modulos: (user.modulos || []).filter((module) => (ALL_MODULES as readonly string[]).includes(module)),
       })))
     }
+    if (!peopleResult.error) setPeople((peopleResult.data || []) as PersonOption[])
+    else setPeople([])
     setLoading(false)
   }
 
@@ -110,6 +124,7 @@ export function UsuariosPermisos() {
     setRole('operador')
     setSelected(new Set())
     setEditingUser(null)
+    setLinkedPersonId('')
   }
 
   function editUser(user: UserAccess) {
@@ -118,6 +133,7 @@ export function UsuariosPermisos() {
     setEmail(user.email)
     setRole(user.rol === 'owner' || user.rol === 'admin' ? 'admin' : 'operador')
     setSelected(new Set(user.modulos))
+    setLinkedPersonId(user.persona_id || '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -149,6 +165,7 @@ export function UsuariosPermisos() {
           password: temporaryPassword,
           rol: role,
           modulos: selectedModules,
+          persona_id: linkedPersonId || null,
         },
       })
       setSaving(false)
@@ -179,11 +196,25 @@ export function UsuariosPermisos() {
       p_user_id: editingUser.user_id,
       p_nombre_completo: fullName.trim(),
     })
+    if (nameError) {
+      setSaving(false)
+      return setMessage(permissionsError(nameError))
+    }
+    if (!nameUpdated) {
+      setSaving(false)
+      return setMessage('Los permisos se actualizaron, pero no fue posible guardar el nombre.')
+    }
+
+    const { data: linked, error: linkError } = await supabase.rpc('vincular_usuario_persona', {
+      p_empresa_id: activeEmpresaId,
+      p_user_id: editingUser.user_id,
+      p_persona_id: linkedPersonId || null,
+    })
     setSaving(false)
 
-    if (nameError) return setMessage(permissionsError(nameError))
-    if (!nameUpdated) return setMessage('Los permisos se actualizaron, pero no fue posible guardar el nombre.')
-    setMessage('Nombre y permisos del usuario actualizados correctamente.')
+    if (linkError) return setMessage(permissionsError(linkError))
+    if (!linked) return setMessage('El acceso se actualizó, pero no fue posible vincular la ficha laboral seleccionada.')
+    setMessage('Nombre, permisos y ficha laboral actualizados correctamente.')
     resetForm()
     await loadUsers()
     if (email.trim().toLowerCase() === userEmail.toLowerCase()) await refreshPermissions()
@@ -246,6 +277,8 @@ export function UsuariosPermisos() {
 
         {!editingUser && <div className="mt-4 grid gap-3 lg:grid-cols-2"><label className="text-sm font-bold text-slate-700">Contraseña temporal<div className="relative mt-2"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type={showPassword ? 'text' : 'password'} value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} autoComplete="new-password" placeholder="Mínimo 8 caracteres" className="w-full rounded-xl border border-slate-300 py-3 pl-11 pr-12 font-normal text-slate-950" /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ocultar contraseña temporal' : 'Mostrar contraseña temporal'} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><b>Primer ingreso:</b> entrega esta contraseña de forma privada. El sistema obligará al usuario a crear una nueva antes de entrar.</div></div>}
 
+        <label className="mt-4 block text-sm font-bold text-slate-700">Ficha laboral vinculada <span className="font-normal text-slate-500">(opcional)</span><select value={linkedPersonId} onChange={(event) => setLinkedPersonId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950"><option value="">Sin ficha vinculada</option>{people.map((person) => <option key={person.id} value={person.id} disabled={Boolean(person.usuario_id && person.usuario_id !== editingUser?.user_id)}>{person.nombre}{person.usuario_id && person.usuario_id !== editingUser?.user_id ? ' · ya vinculada' : ''}</option>)}</select><span className="mt-1 block text-xs font-normal text-slate-500">Esto permite relacionar el acceso al sistema con contratos, ausencias, documentos y remuneraciones de la misma persona.</span></label>
+
         {editingOwner && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900">El propietario conserva acceso completo y no puede limitarse.</div>}
         {role === 'admin' && !editingOwner && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900">Los administradores tienen acceso a todas las secciones y pueden administrar otros usuarios.</div>}
 
@@ -265,7 +298,7 @@ export function UsuariosPermisos() {
       <Card>
         <div className="mb-4 flex items-center gap-2"><UsersRound size={20} className="text-blue-700" /><h3 className="font-bold text-slate-950">Usuarios de la empresa</h3></div>
         <div className="overflow-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Persona</th><th className="p-3">Rol</th><th className="p-3">Secciones</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead><tbody>
-          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3"><div className="font-bold text-slate-900">{user.nombre_completo}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</div><div className="mt-1 text-xs text-slate-500">{user.email}</div></td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar usuario y permisos" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
+          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3"><div className="font-bold text-slate-900">{user.nombre_completo}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</div><div className="mt-1 text-xs text-slate-500">{user.email}</div>{user.persona_nombre && <div className="mt-1 text-xs font-semibold text-emerald-700">Ficha: {user.persona_nombre}</div>}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar usuario y permisos" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
           {!loading && !users.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay usuarios disponibles o todavía falta configurar el módulo.</td></tr>}
         </tbody></table></div>
       </Card>

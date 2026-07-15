@@ -1,27 +1,36 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Layout } from './components/Layout';
-import { Dashboard } from './pages/Dashboard';
-import { Maquinaria } from './pages/Maquinaria';
-import { Repuestos } from './pages/Repuestos';
-import { Auditorias } from './pages/Auditorias';
-import { Importar } from './pages/Importar';
 import { SupabaseSetup } from './pages/SupabaseSetup';
-import { Clientes } from './pages/Clientes';
-import { OrdenesTrabajo } from './pages/OrdenesTrabajo';
-import { CRM } from './pages/CRM';
 import { useEmpresa } from './lib/empresa';
-import { WhatsApp } from './pages/WhatsApp';
-import { IATecnica } from './pages/IATecnica';
-import { PersonasPagos } from './pages/PersonasPagos';
-import { GoogleAds } from './pages/GoogleAds';
 import { Login } from './pages/Login';
-import { EmpresasAsociadas } from './pages/EmpresasAsociadas';
-import { FlotaVehiculos } from './pages/FlotaVehiculos';
-import { PublicacionesProductos } from './pages/PublicacionesProductos';
-import { EppRopa } from './pages/EppRopa';
-import { UsuariosPermisos } from './pages/UsuariosPermisos';
 import { CambioClaveInicial } from './pages/CambioClaveInicial';
 import { usePermisos } from './lib/permisos';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })))
+const Maquinaria = lazy(() => import('./pages/Maquinaria').then((module) => ({ default: module.Maquinaria })))
+const Repuestos = lazy(() => import('./pages/Repuestos').then((module) => ({ default: module.Repuestos })))
+const Auditorias = lazy(() => import('./pages/Auditorias').then((module) => ({ default: module.Auditorias })))
+const Importar = lazy(() => import('./pages/Importar').then((module) => ({ default: module.Importar })))
+const Clientes = lazy(() => import('./pages/Clientes').then((module) => ({ default: module.Clientes })))
+const OrdenesTrabajo = lazy(() => import('./pages/OrdenesTrabajo').then((module) => ({ default: module.OrdenesTrabajo })))
+const CRM = lazy(() => import('./pages/CRM').then((module) => ({ default: module.CRM })))
+const WhatsApp = lazy(() => import('./pages/WhatsApp').then((module) => ({ default: module.WhatsApp })))
+const IATecnica = lazy(() => import('./pages/IATecnica').then((module) => ({ default: module.IATecnica })))
+const PersonasPagos = lazy(() => import('./pages/PersonasPagos').then((module) => ({ default: module.PersonasPagos })))
+const RrhhPersonas = lazy(() => import('./pages/RrhhPersonas').then((module) => ({ default: module.RrhhPersonas })))
+const RrhhContratos = lazy(() => import('./pages/RrhhContratos').then((module) => ({ default: module.RrhhContratos })))
+const RrhhAusencias = lazy(() => import('./pages/RrhhAusencias').then((module) => ({ default: module.RrhhAusencias })))
+const RrhhDocumentos = lazy(() => import('./pages/RrhhDocumentos').then((module) => ({ default: module.RrhhDocumentos })))
+const GoogleAds = lazy(() => import('./pages/GoogleAds').then((module) => ({ default: module.GoogleAds })))
+const EmpresasAsociadas = lazy(() => import('./pages/EmpresasAsociadas').then((module) => ({ default: module.EmpresasAsociadas })))
+const FlotaVehiculos = lazy(() => import('./pages/FlotaVehiculos').then((module) => ({ default: module.FlotaVehiculos })))
+const PublicacionesProductos = lazy(() => import('./pages/PublicacionesProductos').then((module) => ({ default: module.PublicacionesProductos })))
+const EppRopa = lazy(() => import('./pages/EppRopa').then((module) => ({ default: module.EppRopa })))
+const UsuariosPermisos = lazy(() => import('./pages/UsuariosPermisos').then((module) => ({ default: module.UsuariosPermisos })))
+
+function CargandoModulo() {
+ return <div className="flex min-h-[50vh] items-center justify-center"><div className="text-center"><div className="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" /><p className="text-sm font-semibold text-slate-500">Abriendo sección...</p></div></div>
+}
 
 function SinModulos() {
  return <div className="flex min-h-[60vh] items-center justify-center">
@@ -108,7 +117,7 @@ export default function App(){
   return <Layout page={page} setPage={setPage}><SinModulos /></Layout>
  }
 
- return <Layout page={page} setPage={setPage}>
+ return <Layout page={page} setPage={setPage}><Suspense fallback={<CargandoModulo />}>
   {page==='dashboard' && <Dashboard/>}
   {page==='supabase' && <SupabaseSetup/>}
   {page==='clientes' && <Clientes/>}
@@ -120,6 +129,10 @@ export default function App(){
   {page==='crm' && <CRM/>}
   {page==='whatsapp' && <WhatsApp/>}
   {page==='ia' && <IATecnica/>}
+  {page==='rrhh-personas' && <RrhhPersonas/>}
+  {page==='rrhh-contratos' && <RrhhContratos/>}
+  {page==='rrhh-ausencias' && <RrhhAusencias/>}
+  {page==='rrhh-documentos' && <RrhhDocumentos/>}
   {page==='personas-pagos' && <PersonasPagos/>}
   {page==='flota-vehiculos' && <FlotaVehiculos/>}
   {page==='google-ads' && <GoogleAds/>}
@@ -129,5 +142,5 @@ export default function App(){
   {page==='auditorias' && <Auditorias/>}
   {page==='importar' && <Importar/>}
   {page==='usuarios-permisos' && <UsuariosPermisos/>}
- </Layout>
+ </Suspense></Layout>
 }

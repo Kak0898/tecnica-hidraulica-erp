@@ -18,6 +18,9 @@ Este esquema prepara Supabase como base central del ERP:
 - CRM comercial
 - WhatsApp automatico
 - Registro de consultas IA
+- Fichas de trabajadores, contratos y anexos
+- Vacaciones, licencias y otras ausencias
+- Documentos laborales privados, alertas y auditoria
 
 ## Instalacion en Supabase
 
@@ -108,3 +111,22 @@ Supabase entrega automáticamente a la función `SUPABASE_URL`,
 `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY`. Solo los miembros activos con
 rol `owner` o `admin` pueden crear una cuenta. Los nuevos usuarios deben cambiar
 su contraseña temporal durante el primer ingreso.
+
+## Recursos Humanos modular
+
+Después de los patches 15 y 16, ejecuta:
+
+`sql-editor/17_rrhh_escalable.sql`
+
+Este patch no elimina información existente. Amplía `personas` para mantener
+compatibilidad con remuneraciones, flota y EPP, y agrega entidades separadas
+para contratos, anexos, ausencias, vacaciones, documentos, alertas y eventos
+de auditoría. También crea el bucket privado `rrhh-documentos` con políticas
+por empresa y sección.
+
+Si se usa la vinculación opcional entre una cuenta y su ficha laboral, vuelve a
+desplegar la Edge Function después de aplicar el patch:
+
+```bash
+npx supabase functions deploy crear-usuario-empresa
+```

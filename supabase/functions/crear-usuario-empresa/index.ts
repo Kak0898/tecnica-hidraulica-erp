@@ -9,7 +9,8 @@ const corsHeaders = {
 const assignableModules = [
   'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
   'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
-  'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
+  'crm', 'whatsapp', 'rrhh_personas', 'rrhh_contratos',
+  'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos', 'flota', 'maquinaria',
   'repuestos', 'epp_ropa', 'auditorias', 'importar_excel', 'ia',
 ] as const
 
@@ -20,6 +21,7 @@ type RequestPayload = {
   password?: string
   rol?: 'admin' | 'operador'
   modulos?: string[]
+  persona_id?: string | null
 }
 
 function json(status: number, payload: Record<string, unknown>) {
@@ -55,6 +57,7 @@ Deno.serve(async (request) => {
   const email = String(payload.email || '').trim().toLowerCase()
   const password = String(payload.password || '')
   const role = payload.rol === 'admin' ? 'admin' : 'operador'
+  const personaId = String(payload.persona_id || '').trim()
   const requestedModules = Array.isArray(payload.modulos) ? payload.modulos : []
   const moduleSet = new Set(requestedModules.filter((module) => assignableModules.includes(module as typeof assignableModules[number])))
 
@@ -84,6 +87,19 @@ Deno.serve(async (request) => {
 
   if (membershipError || !membership?.activo || !['owner', 'admin'].includes(membership.rol)) {
     return json(403, { error: 'Solo un propietario o administrador puede crear usuarios.' })
+  }
+
+  if (personaId) {
+    const { data: person, error: personError } = await adminClient
+      .from('personas')
+      .select('id, usuario_id')
+      .eq('id', personaId)
+      .eq('empresa_id', empresaId)
+      .maybeSingle()
+
+    if (personError) return json(400, { error: `No fue posible revisar la ficha laboral: ${personError.message}` })
+    if (!person) return json(400, { error: 'La ficha laboral seleccionada no pertenece a esta empresa.' })
+    if (person.usuario_id) return json(409, { error: 'La ficha laboral seleccionada ya está vinculada a otro usuario.' })
   }
 
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
@@ -142,6 +158,15 @@ Deno.serve(async (request) => {
       empresa_id: empresaId,
     }, { onConflict: 'user_id', ignoreDuplicates: true })
     if (activeCompanyError) throw activeCompanyError
+
+    if (personaId) {
+      const { error: personLinkError } = await adminClient
+        .from('personas')
+        .update({ usuario_id: userId })
+        .eq('id', personaId)
+        .eq('empresa_id', empresaId)
+      if (personLinkError) throw personLinkError
+    }
   } catch (error) {
     await adminClient.auth.admin.deleteUser(userId)
     const errorMessage = error && typeof error === 'object' && 'message' in error
@@ -158,6 +183,7 @@ Deno.serve(async (request) => {
     user_id: userId,
     email,
     nombre_completo: nombreCompleto,
+    persona_id: personaId || null,
     requiere_cambio_clave: true,
   })
 })

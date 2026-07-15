@@ -24,9 +24,18 @@ export const MODULE_GROUPS = [
     ],
   },
   {
+    label: 'Recursos humanos',
+    modules: [
+      { key: 'rrhh_personas', label: 'Equipo y fichas' },
+      { key: 'rrhh_contratos', label: 'Contratos y anexos' },
+      { key: 'rrhh_ausencias', label: 'Ausencias y licencias' },
+      { key: 'rrhh_documentos', label: 'Documentos y alertas' },
+      { key: 'personas_pagos', label: 'Remuneraciones y pagos' },
+    ],
+  },
+  {
     label: 'Administración y operación',
     modules: [
-      { key: 'personas_pagos', label: 'Personas y pagos' },
       { key: 'flota', label: 'Flota de vehículos' },
       { key: 'maquinaria', label: 'Maquinaria' },
       { key: 'repuestos', label: 'Repuestos' },
@@ -62,6 +71,10 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
   ordenes: 'ordenes',
   crm: 'crm',
   whatsapp: 'whatsapp',
+  'rrhh-personas': 'rrhh_personas',
+  'rrhh-contratos': 'rrhh_contratos',
+  'rrhh-ausencias': 'rrhh_ausencias',
+  'rrhh-documentos': 'rrhh_documentos',
   'personas-pagos': 'personas_pagos',
   'flota-vehiculos': 'flota',
   maquinaria: 'maquinaria',
@@ -77,6 +90,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
 const PAGE_ORDER = [
   'dashboard', 'google-ads', 'clientes', 'empresas-asociadas', 'presupuestos',
   'cotizaciones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
+  'rrhh-personas', 'rrhh-contratos', 'rrhh-ausencias', 'rrhh-documentos',
   'personas-pagos', 'flota-vehiculos', 'maquinaria', 'repuestos', 'epp-ropa',
   'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',
 ]

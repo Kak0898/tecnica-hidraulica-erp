@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { usePermisos } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
@@ -26,9 +26,18 @@ const groups = [
     ],
   },
   {
+    label: 'Recursos humanos',
+    items: [
+      { key: 'rrhh-personas', label: 'Equipo y fichas', icon: UsersRound },
+      { key: 'rrhh-contratos', label: 'Contratos y anexos', icon: FileSignature },
+      { key: 'rrhh-ausencias', label: 'Ausencias y licencias', icon: CalendarDays },
+      { key: 'rrhh-documentos', label: 'Documentos y alertas', icon: FileCheck2 },
+      { key: 'personas-pagos', label: 'Remuneraciones y pagos', icon: WalletCards },
+    ],
+  },
+  {
     label: 'Administración',
     items: [
-      { key: 'personas-pagos', label: 'Personas y pagos', icon: HardHat },
       { key: 'flota-vehiculos', label: 'Flota de vehículos', icon: CarFront },
       { key: 'maquinaria', label: 'Maquinaria', icon: Boxes },
       { key: 'repuestos', label: 'Repuestos', icon: PackageSearch },

@@ -119,3 +119,15 @@ contraseña temporal y permisos, ejecuta después:
 Este patch agrega perfiles de usuario, nombres visibles y las funciones de
 administración. Después despliega la Edge Function `crear-usuario-empresa` que
 está incluida en `supabase/functions`.
+
+Para habilitar fichas laborales, contratos, anexos, vacaciones, licencias,
+documentos privados, alertas y auditoría, ejecuta a continuación:
+
+`17_rrhh_escalable.sql`
+
+El patch 17 es incremental e idempotente: se puede volver a ejecutar completo
+si la conexión se interrumpe. También reemplaza la lista rígida de módulos por
+el catálogo `sistema_modulos`, de modo que nuevas secciones puedan agregarse sin
+reescribir restricciones antiguas. Al terminar, vuelve a desplegar
+`crear-usuario-empresa` para habilitar la vinculación opcional entre usuario y
+ficha laboral.

@@ -2,7 +2,7 @@
 
 Base inicial del ERP propio para Técnica Hidráulica Ltda., preparada para evolucionar hacia una plataforma modular y multiempresa.
 
-La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, trabajadores, horas extra, anticipos, pagos, liquidaciones, empresas asociadas, flota de vehículos y publicaciones multicanal de productos.
+La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, fichas laborales, contratos, anexos, ausencias, documentos privados, horas extra, anticipos, pagos, liquidaciones, empresas asociadas, flota de vehículos y publicaciones multicanal de productos.
 
 ## Objetivo
 
@@ -22,6 +22,7 @@ Centralizar la operación técnica y comercial en una sola plataforma conectada 
 - IA técnica
 - Google Ads con métricas y recomendaciones diarias
 - Trabajadores, horas extra, anticipos y liquidaciones
+- Contratos, anexos, vacaciones, licencias, documentos y alertas laborales
 - Catálogo comercial y enlaces de publicaciones por producto
 
 ## Puesta en marcha
@@ -44,6 +45,15 @@ ejecutar `supabase/sql-editor/16_creacion_usuarios_perfiles.sql` y desplegar:
 ```bash
 npx supabase functions deploy crear-usuario-empresa
 ```
+
+Para habilitar la base modular de Recursos Humanos, ejecutar después:
+
+`supabase/sql-editor/17_rrhh_escalable.sql`
+
+El patch 17 es incremental y no elimina datos. Agrega fichas ampliadas,
+contratos, anexos, ausencias, saldos de vacaciones, carpetas documentales
+privadas, alertas, auditoría y permisos separados por sección. En una base
+nueva se ejecuta `schema.sql` y luego el patch 17.
 
 ### 2. Usuario y contraseña
 
@@ -93,6 +103,13 @@ El siguiente trabajo técnico es convertir esta base en un módulo ERP conectado
 ## Remuneraciones
 
 La calculadora usa parámetros referenciales y editables para Chile 2026. La liquidación final debe verificarse en Previred o con asesoría contable, especialmente UF, impuesto único, mutualidad y cambios previsionales según el período.
+
+## Diseño escalable
+
+Los módulos, permisos y datos están separados por `empresa_id`. Los nombres y
+la identidad visual de TH pertenecen a esta implementación; las entidades de
+RR.HH. y el catálogo `sistema_modulos` son reutilizables para una futura versión
+comercial independiente y multiempresa.
 
 ## Deploy Vercel
 
