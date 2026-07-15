@@ -90,6 +90,169 @@ alter table public.google_ads_campanas enable row level security;
 alter table public.google_ads_metricas_diarias enable row level security;
 alter table public.google_ads_recomendaciones enable row level security;
 
+create table if not exists public.empresas_asociadas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.current_empresa_id() references public.empresas(id) on delete cascade,
+  tipo text not null default 'proveedor' check (tipo in ('cliente', 'proveedor', 'contratista', 'taller', 'leasing', 'partner', 'otra')),
+  razon_social text not null,
+  nombre_fantasia text,
+  rut text,
+  contacto_nombre text,
+  contacto_cargo text,
+  email text,
+  telefono text,
+  direccion text,
+  sitio_web text,
+  servicios text,
+  estado text not null default 'activa' check (estado in ('activa', 'inactiva')),
+  notas text,
+  created_by uuid default auth.uid() references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (empresa_id, rut)
+);
+
+create table if not exists public.vehiculos_empresa (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.current_empresa_id() references public.empresas(id) on delete cascade,
+  empresa_asociada_id uuid references public.empresas_asociadas(id) on delete set null,
+  conductor_id uuid references public.personas(id) on delete set null,
+  patente text not null,
+  tipo text not null default 'camioneta' check (tipo in ('camioneta', 'automovil', 'camion', 'furgon', 'moto', 'maquinaria', 'otro')),
+  propiedad text not null default 'propio' check (propiedad in ('propio', 'leasing', 'arrendado', 'comodato')),
+  marca text not null,
+  modelo text not null,
+  anio smallint check (anio is null or anio between 1900 and 2200),
+  color text,
+  combustible text,
+  kilometraje numeric not null default 0 check (kilometraje >= 0),
+  estado text not null default 'operativo' check (estado in ('operativo', 'mantenimiento', 'fuera_servicio', 'vendido')),
+  ubicacion text,
+  revision_tecnica_vencimiento date,
+  permiso_circulacion_vencimiento date,
+  seguro_vencimiento date,
+  mantencion_proxima_fecha date,
+  mantencion_proximo_km numeric check (mantencion_proximo_km is null or mantencion_proximo_km >= 0),
+  notas text,
+  created_by uuid default auth.uid() references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (empresa_id, patente)
+);
+
+create index if not exists idx_empresas_asociadas_empresa_tipo on public.empresas_asociadas(empresa_id, tipo, estado);
+create index if not exists idx_vehiculos_empresa_estado on public.vehiculos_empresa(empresa_id, estado);
+create index if not exists idx_vehiculos_empresa_conductor on public.vehiculos_empresa(conductor_id);
+create index if not exists idx_vehiculos_empresa_asociada on public.vehiculos_empresa(empresa_asociada_id);
+create index if not exists idx_vehiculos_empresa_vencimientos on public.vehiculos_empresa(empresa_id, revision_tecnica_vencimiento, permiso_circulacion_vencimiento, seguro_vencimiento);
+
+create or replace function public.validar_relaciones_vehiculo()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as '
+begin
+  if new.empresa_asociada_id is not null and not exists (
+    select 1 from public.empresas_asociadas ea
+    where ea.id = new.empresa_asociada_id and ea.empresa_id = new.empresa_id
+  ) then
+    raise exception ''La empresa asociada no pertenece a la empresa activa'';
+  end if;
+
+  if new.conductor_id is not null and not exists (
+    select 1 from public.personas p
+    where p.id = new.conductor_id and p.empresa_id = new.empresa_id and p.activo = true
+  ) then
+    raise exception ''El conductor no pertenece a la empresa activa'';
+  end if;
+
+  return new;
+end;
+';
+
+drop trigger if exists set_empresas_asociadas_updated_at on public.empresas_asociadas;
+create trigger set_empresas_asociadas_updated_at before update on public.empresas_asociadas for each row execute function public.set_updated_at();
+drop trigger if exists set_vehiculos_empresa_updated_at on public.vehiculos_empresa;
+create trigger set_vehiculos_empresa_updated_at before update on public.vehiculos_empresa for each row execute function public.set_updated_at();
+drop trigger if exists validar_relaciones_vehiculo on public.vehiculos_empresa;
+create trigger validar_relaciones_vehiculo before insert or update on public.vehiculos_empresa for each row execute function public.validar_relaciones_vehiculo();
+
+alter table public.empresas_asociadas enable row level security;
+alter table public.vehiculos_empresa enable row level security;
+
+create table if not exists public.productos_comerciales (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.current_empresa_id() references public.empresas(id) on delete cascade,
+  tipo text not null default 'maquinaria' check (tipo in ('maquinaria', 'repuesto', 'servicio', 'vehiculo', 'otro')),
+  sku text,
+  nombre text not null,
+  descripcion text,
+  precio numeric check (precio is null or precio >= 0),
+  moneda text not null default 'CLP' check (moneda in ('CLP', 'UF', 'USD')),
+  stock numeric check (stock is null or stock >= 0),
+  imagen_url text,
+  estado text not null default 'borrador' check (estado in ('borrador', 'publicado', 'pausado', 'vendido')),
+  notas text,
+  created_by uuid default auth.uid() references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (empresa_id, sku)
+);
+
+create table if not exists public.publicaciones_productos (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null default public.current_empresa_id() references public.empresas(id) on delete cascade,
+  producto_id uuid not null references public.productos_comerciales(id) on delete cascade,
+  plataforma text not null default 'sitio_web' check (plataforma in ('sitio_web', 'mercado_libre', 'facebook_marketplace', 'instagram', 'yapo', 'linkedin', 'google_business', 'whatsapp_catalogo', 'tiktok', 'chileautos', 'otra')),
+  titulo text,
+  url text not null check (length(trim(url)) > 0),
+  estado text not null default 'activa' check (estado in ('activa', 'pausada', 'finalizada', 'eliminada')),
+  precio_publicado numeric check (precio_publicado is null or precio_publicado >= 0),
+  moneda text not null default 'CLP' check (moneda in ('CLP', 'UF', 'USD')),
+  fecha_publicacion date,
+  fecha_vencimiento date,
+  visitas integer not null default 0 check (visitas >= 0),
+  consultas integer not null default 0 check (consultas >= 0),
+  notas text,
+  created_by uuid default auth.uid() references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (producto_id, url)
+);
+
+create index if not exists idx_productos_comerciales_empresa_estado on public.productos_comerciales(empresa_id, estado, tipo);
+create index if not exists idx_publicaciones_productos_empresa_estado on public.publicaciones_productos(empresa_id, estado, plataforma);
+create index if not exists idx_publicaciones_productos_producto on public.publicaciones_productos(producto_id);
+
+create or replace function public.validar_publicacion_producto()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as '
+begin
+  if not exists (
+    select 1
+    from public.productos_comerciales p
+    where p.id = new.producto_id and p.empresa_id = new.empresa_id
+  ) then
+    raise exception ''El producto no pertenece a la empresa activa'';
+  end if;
+  return new;
+end;
+';
+
+drop trigger if exists set_productos_comerciales_updated_at on public.productos_comerciales;
+create trigger set_productos_comerciales_updated_at before update on public.productos_comerciales for each row execute function public.set_updated_at();
+drop trigger if exists set_publicaciones_productos_updated_at on public.publicaciones_productos;
+create trigger set_publicaciones_productos_updated_at before update on public.publicaciones_productos for each row execute function public.set_updated_at();
+drop trigger if exists validar_publicacion_producto on public.publicaciones_productos;
+create trigger validar_publicacion_producto before insert or update on public.publicaciones_productos for each row execute function public.validar_publicacion_producto();
+
+alter table public.productos_comerciales enable row level security;
+alter table public.publicaciones_productos enable row level security;
+
 alter table public.usuarios_empresas
   add column if not exists permisos_inicializados boolean not null default false;
 
@@ -688,5 +851,13 @@ grant execute on function public.listar_usuarios_empresa(uuid) to authenticated;
 grant execute on function public.guardar_permisos_usuario(uuid, text, text, text[]) to authenticated;
 grant execute on function public.cambiar_estado_usuario_empresa(uuid, uuid, boolean) to authenticated;
 grant execute on function public.generar_recomendaciones_google_ads(date) to authenticated;
+grant select, insert, update, delete on public.horas_extra to authenticated;
+grant select, insert, update, delete on public.google_ads_campanas to authenticated;
+grant select, insert, update, delete on public.google_ads_metricas_diarias to authenticated;
+grant select, insert, update, delete on public.google_ads_recomendaciones to authenticated;
+grant select, insert, update, delete on public.empresas_asociadas to authenticated;
+grant select, insert, update, delete on public.vehiculos_empresa to authenticated;
+grant select, insert, update, delete on public.productos_comerciales to authenticated;
+grant select, insert, update, delete on public.publicaciones_productos to authenticated;
 
 notify pgrst, 'reload schema';
