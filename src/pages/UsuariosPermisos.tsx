@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCheck, Pencil, Power, PowerOff, RefreshCw, Save, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
+import { CheckCheck, Eye, EyeOff, KeyRound, Pencil, Power, PowerOff, RefreshCw, Save, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 type UserAccess = {
   user_id: string
   email: string
+  nombre_completo: string
   rol: string
   activo: boolean
   modulos: ModuleKey[]
@@ -25,10 +26,26 @@ const presets: Array<{ label: string; modules: ModuleKey[] }> = [
 
 function permissionsError(error: { code?: string; message?: string } | null) {
   if (!error) return ''
+  if (/listar_usuarios_empresa_detalle|actualizar_nombre_usuario_empresa/i.test(error.message || '')) {
+    return 'Falta ejecutar el archivo SQL 16_creacion_usuarios_perfiles.sql en Supabase.'
+  }
   if (error.code === 'PGRST202' || /listar_usuarios_empresa|guardar_permisos_usuario|schema cache/i.test(error.message || '')) {
     return 'Falta ejecutar el archivo SQL 15_usuarios_permisos_modulos.sql en Supabase.'
   }
   return error.message || 'No fue posible completar la operación.'
+}
+
+async function functionErrorMessage(error: unknown) {
+  const fallback = error instanceof Error ? error.message : 'No fue posible crear la cuenta.'
+  const context = (error as { context?: Response } | null)?.context
+  if (!context) return fallback
+
+  try {
+    const payload = await context.clone().json() as { error?: string }
+    return payload.error || fallback
+  } catch {
+    return fallback
+  }
 }
 
 function roleLabel(role: string) {
@@ -41,7 +58,10 @@ export function UsuariosPermisos() {
   const { activeEmpresaId, activeEmpresa, userEmail } = useEmpresa()
   const { isAdmin, schemaReady, refreshPermissions } = usePermisos()
   const [users, setUsers] = useState<UserAccess[]>([])
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [temporaryPassword, setTemporaryPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState<'admin' | 'operador'>('operador')
   const [selected, setSelected] = useState<Set<ModuleKey>>(new Set())
   const [editingUser, setEditingUser] = useState<UserAccess | null>(null)
@@ -56,7 +76,7 @@ export function UsuariosPermisos() {
     }
 
     setLoading(true)
-    const { data, error } = await supabase.rpc('listar_usuarios_empresa', {
+    const { data, error } = await supabase.rpc('listar_usuarios_empresa_detalle', {
       p_empresa_id: activeEmpresaId,
     })
 
@@ -83,7 +103,10 @@ export function UsuariosPermisos() {
   }), [users])
 
   function resetForm() {
+    setFullName('')
     setEmail('')
+    setTemporaryPassword('')
+    setShowPassword(false)
     setRole('operador')
     setSelected(new Set())
     setEditingUser(null)
@@ -91,6 +114,7 @@ export function UsuariosPermisos() {
 
   function editUser(user: UserAccess) {
     setEditingUser(user)
+    setFullName(user.nombre_completo)
     setEmail(user.email)
     setRole(user.rol === 'owner' || user.rol === 'admin' ? 'admin' : 'operador')
     setSelected(new Set(user.modulos))
@@ -108,21 +132,58 @@ export function UsuariosPermisos() {
 
   async function saveAccess() {
     if (!activeEmpresaId) return setMessage('Selecciona una empresa activa antes de guardar permisos.')
+    if (fullName.trim().length < 2) return setMessage('Ingresa el nombre completo de la persona.')
     if (!email.trim()) return setMessage('Ingresa el correo del usuario.')
+    if (!editingUser && temporaryPassword.length < 8) return setMessage('La contraseña temporal debe tener al menos 8 caracteres.')
     if (role === 'operador' && selected.size === 0) return setMessage('Selecciona al menos una sección para este usuario.')
 
     setSaving(true)
+    const selectedModules = role === 'admin' ? [...ALL_MODULES] : Array.from(selected)
+
+    if (!editingUser) {
+      const { error } = await supabase.functions.invoke('crear-usuario-empresa', {
+        body: {
+          empresa_id: activeEmpresaId,
+          nombre_completo: fullName.trim(),
+          email: email.trim(),
+          password: temporaryPassword,
+          rol: role,
+          modulos: selectedModules,
+        },
+      })
+      setSaving(false)
+
+      if (error) return setMessage(await functionErrorMessage(error))
+      setMessage('Usuario creado correctamente. Ya puede ingresar con la contraseña temporal y deberá cambiarla en su primer acceso.')
+      resetForm()
+      await loadUsers()
+      return
+    }
+
     const { data, error } = await supabase.rpc('guardar_permisos_usuario', {
       p_empresa_id: activeEmpresaId,
       p_email: email.trim(),
       p_rol: role,
-      p_modulos: role === 'admin' ? [...ALL_MODULES] : Array.from(selected),
+      p_modulos: selectedModules,
+    })
+
+    if (error || !data) {
+      setSaving(false)
+      return setMessage(error
+        ? permissionsError(error)
+        : 'No se pudo actualizar el acceso. Verifica que tu cuenta siga siendo administradora.')
+    }
+
+    const { data: nameUpdated, error: nameError } = await supabase.rpc('actualizar_nombre_usuario_empresa', {
+      p_empresa_id: activeEmpresaId,
+      p_user_id: editingUser.user_id,
+      p_nombre_completo: fullName.trim(),
     })
     setSaving(false)
 
-    if (error) return setMessage(permissionsError(error))
-    if (!data) return setMessage('No se pudo guardar el acceso. Verifica que el correo exista en Supabase Authentication y que tu cuenta siga siendo administradora.')
-    setMessage(editingUser ? 'Permisos del usuario actualizados correctamente.' : 'Usuario asociado y permisos guardados correctamente.')
+    if (nameError) return setMessage(permissionsError(nameError))
+    if (!nameUpdated) return setMessage('Los permisos se actualizaron, pero no fue posible guardar el nombre.')
+    setMessage('Nombre y permisos del usuario actualizados correctamente.')
     resetForm()
     await loadUsers()
     if (email.trim().toLowerCase() === userEmail.toLowerCase()) await refreshPermissions()
@@ -174,13 +235,16 @@ export function UsuariosPermisos() {
       <Card>
         <div className="mb-5 flex items-center gap-3">
           <div className="rounded-xl bg-blue-100 p-3 text-blue-700"><UserPlus size={21} /></div>
-          <div><h3 className="font-bold text-slate-950">{editingUser ? 'Editar acceso del usuario' : 'Agregar usuario existente'}</h3><p className="text-sm text-slate-500">El correo debe tener previamente una cuenta creada en Supabase Authentication.</p></div>
+          <div><h3 className="font-bold text-slate-950">{editingUser ? 'Editar usuario y acceso' : 'Crear nuevo usuario'}</h3><p className="text-sm text-slate-500">Registra a la persona, crea su cuenta y define las secciones que podrá utilizar.</p></div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_260px]">
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_260px]">
+          <label className="text-sm font-bold text-slate-700">Nombre completo<input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Nombre y apellido" className="mt-2 w-full rounded-xl border border-slate-300 p-3 font-normal text-slate-950" /></label>
           <label className="text-sm font-bold text-slate-700">Correo del usuario<input type="email" value={email} disabled={Boolean(editingUser)} onChange={(event) => setEmail(event.target.value)} placeholder="nombre@tecnicahidraulica.cl" className="mt-2 w-full rounded-xl border border-slate-300 p-3 font-normal text-slate-950 disabled:bg-slate-100" /></label>
           <label className="text-sm font-bold text-slate-700">Tipo de acceso<select value={role} disabled={editingOwner} onChange={(event) => setRole(event.target.value as 'admin' | 'operador')} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950 disabled:bg-slate-100"><option value="operador">Usuario por módulos</option><option value="admin">Administrador completo</option></select></label>
         </div>
+
+        {!editingUser && <div className="mt-4 grid gap-3 lg:grid-cols-2"><label className="text-sm font-bold text-slate-700">Contraseña temporal<div className="relative mt-2"><KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type={showPassword ? 'text' : 'password'} value={temporaryPassword} onChange={(event) => setTemporaryPassword(event.target.value)} autoComplete="new-password" placeholder="Mínimo 8 caracteres" className="w-full rounded-xl border border-slate-300 py-3 pl-11 pr-12 font-normal text-slate-950" /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Ocultar contraseña temporal' : 'Mostrar contraseña temporal'} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><b>Primer ingreso:</b> entrega esta contraseña de forma privada. El sistema obligará al usuario a crear una nueva antes de entrar.</div></div>}
 
         {editingOwner && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900">El propietario conserva acceso completo y no puede limitarse.</div>}
         {role === 'admin' && !editingOwner && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900">Los administradores tienen acceso a todas las secciones y pueden administrar otros usuarios.</div>}
@@ -195,13 +259,13 @@ export function UsuariosPermisos() {
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap gap-2"><button onClick={saveAccess} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><Save size={17} />{saving ? 'Guardando...' : editingUser ? 'Actualizar permisos' : 'Agregar y guardar'}</button>{editingUser && <button onClick={resetForm} className="inline-flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-3 font-bold text-slate-700"><X size={17} />Cancelar</button>}</div>
+        <div className="mt-6 flex flex-wrap gap-2"><button onClick={saveAccess} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><Save size={17} />{saving ? 'Guardando...' : editingUser ? 'Actualizar usuario' : 'Crear usuario y guardar'}</button>{editingUser && <button onClick={resetForm} className="inline-flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-3 font-bold text-slate-700"><X size={17} />Cancelar</button>}</div>
       </Card>
 
       <Card>
         <div className="mb-4 flex items-center gap-2"><UsersRound size={20} className="text-blue-700" /><h3 className="font-bold text-slate-950">Usuarios de la empresa</h3></div>
-        <div className="overflow-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Usuario</th><th className="p-3">Rol</th><th className="p-3">Secciones</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead><tbody>
-          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3 font-bold text-slate-900">{user.email}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar permisos" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
+        <div className="overflow-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Persona</th><th className="p-3">Rol</th><th className="p-3">Secciones</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead><tbody>
+          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3"><div className="font-bold text-slate-900">{user.nombre_completo}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</div><div className="mt-1 text-xs text-slate-500">{user.email}</div></td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar usuario y permisos" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
           {!loading && !users.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay usuarios disponibles o todavía falta configurar el módulo.</td></tr>}
         </tbody></table></div>
       </Card>

@@ -335,10 +335,22 @@ export function SupabaseSetup() {
       },
     })
 
+    if (error) {
+      setActionLoading(false)
+      setMessage(`No se pudo guardar el perfil comercial: ${error.message}`)
+      return
+    }
+
+    const { error: profileError } = await supabase.from('perfiles_usuarios').upsert({
+      user_id: userId,
+      nombre_completo: profileForm.nombre.trim() || userEmail.split('@')[0],
+      creado_por: userId,
+    }, { onConflict: 'user_id' })
+
     setActionLoading(false)
 
-    if (error) {
-      setMessage(`No se pudo guardar el perfil comercial: ${error.message}`)
+    if (profileError) {
+      setMessage(`Los datos comerciales se guardaron, pero el nombre no pudo sincronizarse: ${profileError.message}`)
       return
     }
 

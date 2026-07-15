@@ -38,9 +38,19 @@ el patch incremental más reciente requerido, por ejemplo:
 
 `supabase/sql-editor/13_hardening_cotizaciones_decimales.sql`
 
+Para habilitar la creación administrada de usuarios en una base existente,
+ejecutar `supabase/sql-editor/16_creacion_usuarios_perfiles.sql` y desplegar:
+
+```bash
+npx supabase functions deploy crear-usuario-empresa
+```
+
 ### 2. Usuario y contraseña
 
-En Supabase ir a Authentication > Users, crear el usuario interno de TH con correo y contraseña, e iniciar sesión desde TH Control. Al entrar por primera vez, usar Configuración para asociar la empresa base.
+El primer propietario se crea desde Supabase Authentication. Después, los
+propietarios y administradores pueden crear nuevas cuentas directamente desde
+Usuarios y permisos, indicando nombre, correo, contraseña temporal, rol y
+secciones autorizadas.
 
 No se habilitó registro público: las cuentas las controla la administración de TH.
 

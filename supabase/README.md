@@ -93,3 +93,18 @@ upsert(payload, { onConflict: 'empresa_id,code' })
 ```
 
 En ese momento se podra eliminar la restriccion global `unique (code)` y permitir codigos repetidos entre empresas distintas.
+
+## Creacion administrada de usuarios
+
+En una base existente, ejecuta `sql-editor/16_creacion_usuarios_perfiles.sql`
+después del patch 15. Luego despliega la función segura que crea cuentas de
+Authentication sin exponer la service role en el navegador:
+
+```bash
+npx supabase functions deploy crear-usuario-empresa
+```
+
+Supabase entrega automáticamente a la función `SUPABASE_URL`,
+`SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY`. Solo los miembros activos con
+rol `owner` o `admin` pueden crear una cuenta. Los nuevos usuarios deben cambiar
+su contraseña temporal durante el primer ingreso.

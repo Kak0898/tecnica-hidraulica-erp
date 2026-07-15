@@ -1,0 +1,4 @@
+project_id = "tecnica-hidraulica-erp"
+
+[functions.crear-usuario-empresa]
+verify_jwt = true

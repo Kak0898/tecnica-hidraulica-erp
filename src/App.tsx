@@ -20,6 +20,7 @@ import { FlotaVehiculos } from './pages/FlotaVehiculos';
 import { PublicacionesProductos } from './pages/PublicacionesProductos';
 import { EppRopa } from './pages/EppRopa';
 import { UsuariosPermisos } from './pages/UsuariosPermisos';
+import { CambioClaveInicial } from './pages/CambioClaveInicial';
 import { usePermisos } from './lib/permisos';
 
 function SinModulos() {
@@ -77,7 +78,7 @@ function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' })
 
 export default function App(){
  const [page,setPage]=useState('dashboard');
- const { loading, userEmail, activeEmpresa } = useEmpresa()
+ const { loading, userEmail, activeEmpresa, requiresPasswordChange, refreshEmpresa } = useEmpresa()
  const { loading: permissionsLoading, hasPagePermission, firstAllowedPage } = usePermisos()
 
  useEffect(() => {
@@ -96,6 +97,8 @@ export default function App(){
  }
 
  if (!userEmail) return <Login />
+
+ if (requiresPasswordChange) return <CambioClaveInicial onComplete={refreshEmpresa} />
 
  if (!activeEmpresa) {
   return <Layout page="supabase" setPage={setPage}><SupabaseSetup /></Layout>

@@ -110,3 +110,12 @@ Para habilitar administradores y permisos individuales por sección, ejecuta:
 Ese patch es no destructivo. Agrega la pantalla de usuarios, permisos por empresa y protección RLS para que cada cuenta solo pueda leer o modificar los módulos autorizados. La cuenta `usuario.general@tecnicahidraulica.cl` queda como administradora cuando ya pertenece a la empresa.
 
 El mismo archivo también recupera automáticamente las tablas de horas extra, Google Ads, empresas asociadas, flota y publicaciones si los parches 10, 11 o 12 no alcanzaron a ejecutarse. Se puede volver a ejecutar después de un error sin eliminar registros existentes.
+
+Para que los administradores puedan crear cuentas completas con nombre,
+contraseña temporal y permisos, ejecuta después:
+
+`16_creacion_usuarios_perfiles.sql`
+
+Este patch agrega perfiles de usuario, nombres visibles y las funciones de
+administración. Después despliega la Edge Function `crear-usuario-empresa` que
+está incluida en `supabase/functions`.

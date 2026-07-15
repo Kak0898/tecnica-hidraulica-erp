@@ -48,7 +48,7 @@ const groups = [
 ];
 
 export function Layout({ page, setPage, children }: { page: string; setPage: (p:string)=>void; children: ReactNode }) {
-  const { loading, userEmail, empresas, activeEmpresa, activeEmpresaId, setEmpresaActiva } = useEmpresa()
+  const { loading, userEmail, userName, empresas, activeEmpresa, activeEmpresaId, setEmpresaActiva } = useEmpresa()
   const { role, isAdmin, hasPagePermission } = usePermisos()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -86,7 +86,7 @@ export function Layout({ page, setPage, children }: { page: string; setPage: (p:
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             </div>
-          ) : <p className="mt-2 truncate text-xs text-slate-400">{userEmail}</p>}
+          ) : <p className="mt-2 truncate text-xs text-slate-400">{userName || userEmail}</p>}
         </div>
       </div>
 
@@ -111,7 +111,8 @@ export function Layout({ page, setPage, children }: { page: string; setPage: (p:
 
       <div className="border-t border-white/10 p-4">
         <div className="mb-3 min-w-0 px-2">
-          <p className="truncate text-xs font-semibold text-slate-200">{userEmail}</p>
+          <p className="truncate text-xs font-semibold text-slate-200">{userName || userEmail}</p>
+          {userName && <p className="mt-1 truncate text-[11px] text-slate-500">{userEmail}</p>}
           <p className="mt-1 text-[11px] text-emerald-400">Sesión protegida</p>
         </div>
         <button onClick={signOut} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-400 transition hover:bg-red-500/10 hover:text-red-300">

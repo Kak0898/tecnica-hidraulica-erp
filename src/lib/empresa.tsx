@@ -18,6 +18,8 @@ type UsuarioEmpresa = {
 type EmpresaContextValue = {
   loading: boolean
   userEmail: string
+  userName: string
+  requiresPasswordChange: boolean
   empresas: UsuarioEmpresa[]
   activeEmpresa: Empresa | null
   activeEmpresaId: string
@@ -30,14 +32,18 @@ const EmpresaContext = createContext<EmpresaContextValue | null>(null)
 export function EmpresaProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState('')
+  const [userName, setUserName] = useState('')
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false)
   const [empresas, setEmpresas] = useState<UsuarioEmpresa[]>([])
   const [activeEmpresaId, setActiveEmpresaId] = useState('')
   const currentUserIdRef = useRef('')
 
-  async function loadEmpresaForUser(user: { id: string; email?: string } | null) {
+  async function loadEmpresaForUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null) {
     setLoading(true)
     currentUserIdRef.current = user?.id || ''
     setUserEmail(user?.email || '')
+    setUserName(String(user?.user_metadata?.erp_nombre || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || ''))
+    setRequiresPasswordChange(user?.user_metadata?.erp_requiere_cambio_clave === true)
 
     if (!user) {
       setEmpresas([])
@@ -115,6 +121,8 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
       value={{
         loading,
         userEmail,
+        userName,
+        requiresPasswordChange,
         empresas,
         activeEmpresa,
         activeEmpresaId,
