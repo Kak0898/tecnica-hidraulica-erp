@@ -112,7 +112,7 @@ export function UsuariosPermisos() {
     if (role === 'operador' && selected.size === 0) return setMessage('Selecciona al menos una sección para este usuario.')
 
     setSaving(true)
-    const { error } = await supabase.rpc('guardar_permisos_usuario', {
+    const { data, error } = await supabase.rpc('guardar_permisos_usuario', {
       p_empresa_id: activeEmpresaId,
       p_email: email.trim(),
       p_rol: role,
@@ -121,6 +121,7 @@ export function UsuariosPermisos() {
     setSaving(false)
 
     if (error) return setMessage(permissionsError(error))
+    if (!data) return setMessage('No se pudo guardar el acceso. Verifica que el correo exista en Supabase Authentication y que tu cuenta siga siendo administradora.')
     setMessage(editingUser ? 'Permisos del usuario actualizados correctamente.' : 'Usuario asociado y permisos guardados correctamente.')
     resetForm()
     await loadUsers()
@@ -131,12 +132,13 @@ export function UsuariosPermisos() {
     const nextActive = !user.activo
     if (!nextActive && !confirm(`¿Desactivar el acceso de ${user.email} a esta empresa?`)) return
 
-    const { error } = await supabase.rpc('cambiar_estado_usuario_empresa', {
+    const { data, error } = await supabase.rpc('cambiar_estado_usuario_empresa', {
       p_empresa_id: activeEmpresaId,
       p_user_id: user.user_id,
       p_activo: nextActive,
     })
     if (error) return setMessage(permissionsError(error))
+    if (!data) return setMessage('No se pudo cambiar el estado. No puedes desactivarte a ti mismo ni desactivar al propietario de la empresa.')
     setMessage(nextActive ? 'Acceso del usuario activado correctamente.' : 'Acceso del usuario desactivado correctamente.')
     await loadUsers()
   }

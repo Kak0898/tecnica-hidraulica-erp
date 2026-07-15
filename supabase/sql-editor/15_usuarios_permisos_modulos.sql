@@ -324,57 +324,50 @@ as '
 
 create or replace function public.mis_permisos_empresa(p_empresa_id uuid)
 returns jsonb
-language plpgsql
+language sql
 stable
 security definer
 set search_path = public
-as '
-declare
-  v_role text;
-  v_is_admin boolean := false;
-  module_list text[];
-  all_modules constant text[] := array[
-    ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
-    ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
-    ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
-    ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'',
-    ''ia'', ''configuracion'', ''usuarios_permisos''
-  ];
-begin
-  v_role := (
+as $function$
+  with membership as (
     select ue.rol
     from public.usuarios_empresas ue
     where ue.empresa_id = p_empresa_id
       and ue.user_id = auth.uid()
       and ue.activo = true
     limit 1
-  );
-
-  if v_role is null then
-    return jsonb_build_object(''rol'', null, ''is_admin'', false, ''modulos'', ''[]''::jsonb);
-  end if;
-
-  v_is_admin := v_role = ''owner'' or v_role = ''admin'';
-
-  if v_is_admin then
-    module_list := all_modules;
-  else
-    module_list := (
-      select coalesce(array_agg(up.modulo order by up.modulo), array[]::text[])
-      from public.usuario_permisos up
-      where up.empresa_id = p_empresa_id
-        and up.user_id = auth.uid()
-        and up.permitido = true
-    );
-  end if;
-
-  return jsonb_build_object(
-    ''rol'', v_role,
-    ''is_admin'', v_is_admin,
-    ''modulos'', to_jsonb(module_list)
-  );
-end;
-';
+  ),
+  permission_list as (
+    select coalesce(array_agg(up.modulo order by up.modulo), array[]::text[]) as modulos
+    from public.usuario_permisos up
+    where up.empresa_id = p_empresa_id
+      and up.user_id = auth.uid()
+      and up.permitido = true
+  )
+  select coalesce(
+    (
+      select jsonb_build_object(
+        'rol', membership.rol,
+        'is_admin', membership.rol in ('owner', 'admin'),
+        'modulos', to_jsonb(
+          case
+            when membership.rol in ('owner', 'admin') then array[
+              'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
+              'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
+              'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
+              'repuestos', 'epp_ropa', 'auditorias', 'importar_excel',
+              'ia', 'configuracion', 'usuarios_permisos'
+            ]::text[]
+            else permission_list.modulos
+          end
+        )
+      )
+      from membership
+      cross join permission_list
+    ),
+    jsonb_build_object('rol', null, 'is_admin', false, 'modulos', '[]'::jsonb)
+  )
+$function$;
 
 create or replace function public.listar_usuarios_empresa(p_empresa_id uuid)
 returns table (
@@ -384,29 +377,23 @@ returns table (
   activo boolean,
   modulos text[]
 )
-language plpgsql
+language sql
 stable
 security definer
 set search_path = public, auth
-as '
-begin
-  if not public.is_empresa_admin(p_empresa_id) then
-    raise exception ''Solo un administrador puede revisar usuarios y permisos'';
-  end if;
-
-  return query
+as $function$
   select
     ue.user_id,
     au.email::text,
     ue.rol,
     ue.activo,
     case
-      when ue.rol in (''owner'', ''admin'') then array[
-        ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
-        ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
-        ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
-        ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'',
-        ''ia'', ''configuracion'', ''usuarios_permisos''
+      when ue.rol in ('owner', 'admin') then array[
+        'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
+        'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
+        'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
+        'repuestos', 'epp_ropa', 'auditorias', 'importar_excel',
+        'ia', 'configuracion', 'usuarios_permisos'
       ]::text[]
       else coalesce((
         select array_agg(up.modulo order by up.modulo)
@@ -419,11 +406,11 @@ begin
   from public.usuarios_empresas ue
   join auth.users au on au.id = ue.user_id
   where ue.empresa_id = p_empresa_id
+    and public.is_empresa_admin(p_empresa_id)
   order by
-    case ue.rol when ''owner'' then 0 when ''admin'' then 1 else 2 end,
-    lower(au.email);
-end;
-';
+    case ue.rol when 'owner' then 0 when 'admin' then 1 else 2 end,
+    lower(au.email)
+$function$;
 
 create or replace function public.guardar_permisos_usuario(
   p_empresa_id uuid,
@@ -432,89 +419,90 @@ create or replace function public.guardar_permisos_usuario(
   p_modulos text[] default array[]::text[]
 )
 returns uuid
-language plpgsql
+language sql
 security definer
 set search_path = public, auth
-as '
-declare
-  target_user_id uuid;
-  existing_role text;
-  requested_role text;
-  all_modules constant text[] := array[
-    ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
-    ''presupuestos'', ''cotizaciones'', ''publicaciones'', ''ordenes'',
-    ''crm'', ''whatsapp'', ''personas_pagos'', ''flota'', ''maquinaria'',
-    ''repuestos'', ''epp_ropa'', ''auditorias'', ''importar_excel'',
-    ''ia''
-  ];
-begin
-  if not public.is_empresa_admin(p_empresa_id) then
-    raise exception ''Solo un administrador puede guardar permisos'';
-  end if;
-
-  target_user_id := (
-    select au.id
+as $function$
+  with target as (
+    select au.id as user_id
     from auth.users au
-    where lower(au.email) = lower(trim(coalesce(p_email, '''')))
+    where lower(au.email) = lower(trim(coalesce(p_email, '')))
+      and p_rol = any(array['admin', 'operador']::text[])
+      and public.is_empresa_admin(p_empresa_id)
     limit 1
-  );
-
-  if target_user_id is null then
-    raise exception ''El correo no tiene una cuenta creada en Supabase Auth. Crea primero la cuenta y vuelve a intentarlo'';
-  end if;
-
-  if p_rol <> ''admin'' and p_rol <> ''operador'' then
-    raise exception ''El tipo de acceso debe ser administrador o usuario por módulos'';
-  end if;
-
-  existing_role := (
-    select ue.rol
-    from public.usuarios_empresas ue
-    where ue.empresa_id = p_empresa_id and ue.user_id = target_user_id
-    limit 1
-  );
-
-  requested_role := case when existing_role = ''owner'' then ''owner'' else p_rol end;
-
-  if target_user_id = auth.uid()
-     and (existing_role = ''owner'' or existing_role = ''admin'')
-     and requested_role <> ''owner''
-     and requested_role <> ''admin'' then
-    raise exception ''No puedes quitarte tus propios permisos administrativos'';
-  end if;
-
-  insert into public.usuarios_empresas (
-    empresa_id, user_id, rol, activo, permisos_inicializados
-  ) values (
-    p_empresa_id, target_user_id, requested_role, true, true
-  )
-  on conflict (empresa_id, user_id) do update
-    set rol = excluded.rol,
-        activo = true,
-        permisos_inicializados = true,
-        updated_at = now();
-
-  delete from public.usuario_permisos up
-  where up.empresa_id = p_empresa_id and up.user_id = target_user_id;
-
-  if requested_role <> ''owner'' and requested_role <> ''admin'' then
+  ),
+  prepared as (
+    select
+      target.user_id,
+      coalesce((
+        select ue.rol
+        from public.usuarios_empresas ue
+        where ue.empresa_id = p_empresa_id
+          and ue.user_id = target.user_id
+        limit 1
+      ), '') as existing_role
+    from target
+  ),
+  authorized as (
+    select
+      prepared.user_id,
+      case when prepared.existing_role = 'owner' then 'owner' else p_rol end as requested_role
+    from prepared
+    where not (
+      prepared.user_id = auth.uid()
+      and prepared.existing_role = any(array['owner', 'admin']::text[])
+      and p_rol <> 'admin'
+    )
+  ),
+  membership_write as (
+    insert into public.usuarios_empresas (
+      empresa_id, user_id, rol, activo, permisos_inicializados
+    )
+    select
+      p_empresa_id, authorized.user_id, authorized.requested_role, true, true
+    from authorized
+    on conflict (empresa_id, user_id) do update
+      set rol = excluded.rol,
+          activo = true,
+          permisos_inicializados = true,
+          updated_at = now()
+    returning user_id, rol
+  ),
+  permission_write as (
     insert into public.usuario_permisos (empresa_id, user_id, modulo, permitido)
-    select p_empresa_id, target_user_id, requested.module_key, true
-    from (
-      select distinct unnest(coalesce(p_modulos, array[]::text[])) as module_key
-    ) requested
-    where requested.module_key = any(all_modules)
+    select
+      p_empresa_id,
+      membership_write.user_id,
+      module_catalog.modulo,
+      case
+        when membership_write.rol in ('owner', 'admin') then false
+        else module_catalog.modulo = any(coalesce(p_modulos, array[]::text[]))
+      end
+    from membership_write
+    cross join unnest(array[
+      'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
+      'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
+      'crm', 'whatsapp', 'personas_pagos', 'flota', 'maquinaria',
+      'repuestos', 'epp_ropa', 'auditorias', 'importar_excel', 'ia'
+    ]::text[]) as module_catalog(modulo)
     on conflict (empresa_id, user_id, modulo) do update
-      set permitido = true, updated_at = now();
-  end if;
-
-  insert into public.usuario_empresa_activa (user_id, empresa_id)
-  values (target_user_id, p_empresa_id)
-  on conflict (user_id) do nothing;
-
-  return target_user_id;
-end;
-';
+      set permitido = excluded.permitido,
+          updated_at = now()
+    returning user_id
+  ),
+  company_write as (
+    insert into public.usuario_empresa_activa (user_id, empresa_id)
+    select membership_write.user_id, p_empresa_id
+    from membership_write
+    on conflict (user_id) do nothing
+    returning user_id
+  )
+  select membership_write.user_id
+  from membership_write
+  where (select count(*) from permission_write) >= 0
+    and (select count(*) from company_write) >= 0
+  limit 1
+$function$;
 
 create or replace function public.cambiar_estado_usuario_empresa(
   p_empresa_id uuid,
@@ -522,39 +510,23 @@ create or replace function public.cambiar_estado_usuario_empresa(
   p_activo boolean
 )
 returns boolean
-language plpgsql
+language sql
 security definer
 set search_path = public
-as '
-declare
-  target_role text;
-begin
-  if not public.is_empresa_admin(p_empresa_id) then
-    raise exception ''Solo un administrador puede cambiar el estado de un usuario'';
-  end if;
-
-  if p_user_id = auth.uid() and p_activo = false then
-    raise exception ''No puedes desactivar tu propio acceso'';
-  end if;
-
-  target_role := (
-    select ue.rol
-    from public.usuarios_empresas ue
-    where ue.empresa_id = p_empresa_id and ue.user_id = p_user_id
-    limit 1
-  );
-
-  if target_role = ''owner'' and p_activo = false then
-    raise exception ''No se puede desactivar al propietario de la empresa'';
-  end if;
-
-  update public.usuarios_empresas ue
-  set activo = p_activo, updated_at = now()
-  where ue.empresa_id = p_empresa_id and ue.user_id = p_user_id;
-
-  return found;
-end;
-';
+as $function$
+  with updated as (
+    update public.usuarios_empresas ue
+    set activo = p_activo,
+        updated_at = now()
+    where ue.empresa_id = p_empresa_id
+      and ue.user_id = p_user_id
+      and public.is_empresa_admin(p_empresa_id)
+      and (p_activo or p_user_id <> auth.uid())
+      and (p_activo or ue.rol <> 'owner')
+    returning true as changed
+  )
+  select exists(select 1 from updated)
+$function$;
 
 -- usuario.general administra los permisos cuando ya pertenece a la empresa.
 update public.usuarios_empresas ue
