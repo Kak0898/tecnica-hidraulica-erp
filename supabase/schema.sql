@@ -1737,10 +1737,11 @@ as $function$
   )
   select coalesce(
     (
-      select jsonb_build_object(
-        'rol', membership.rol,
-        'is_admin', membership.rol in ('owner', 'admin'),
-        'modulos', to_jsonb(
+      select to_jsonb(access_result)
+      from (
+        select
+          membership.rol,
+          membership.rol in ('owner', 'admin') as is_admin,
           case
             when membership.rol in ('owner', 'admin') then array[
               'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
@@ -1750,14 +1751,19 @@ as $function$
               'ia', 'configuracion', 'usuarios_permisos'
             ]::text[]
             else permission_list.modulos
-          end
-        )
-      )
-      from membership
-      cross join permission_list
+          end as modulos
+        from membership
+        cross join permission_list
+      ) access_result
     ),
-    jsonb_build_object('rol', null, 'is_admin', false, 'modulos', '[]'::jsonb)
+    to_jsonb(empty_result)
   )
+  from (
+    select
+      null::text as rol,
+      false as is_admin,
+      array[]::text[] as modulos
+  ) empty_result
 $function$;
 
 create or replace function public.listar_usuarios_empresa(p_empresa_id uuid)
