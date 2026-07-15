@@ -330,7 +330,8 @@ security definer
 set search_path = public
 as '
 declare
-  membership_role text;
+  v_role text;
+  v_is_admin boolean := false;
   module_list text[];
   all_modules constant text[] := array[
     ''dashboard'', ''google_ads'', ''clientes'', ''empresas_asociadas'',
@@ -341,18 +342,20 @@ declare
   ];
 begin
   select ue.rol
-    into membership_role
+    into v_role
   from public.usuarios_empresas ue
   where ue.empresa_id = p_empresa_id
     and ue.user_id = auth.uid()
     and ue.activo = true
   limit 1;
 
-  if membership_role is null then
+  if v_role is null then
     return jsonb_build_object(''rol'', null, ''is_admin'', false, ''modulos'', ''[]''::jsonb);
   end if;
 
-  if membership_role in (''owner'', ''admin'') then
+  v_is_admin := v_role = ''owner'' or v_role = ''admin'';
+
+  if v_is_admin then
     module_list := all_modules;
   else
     select coalesce(array_agg(up.modulo order by up.modulo), array[]::text[])
@@ -364,8 +367,8 @@ begin
   end if;
 
   return jsonb_build_object(
-    ''rol'', membership_role,
-    ''is_admin'', membership_role in (''owner'', ''admin''),
+    ''rol'', v_role,
+    ''is_admin'', v_is_admin,
     ''modulos'', to_jsonb(module_list)
   );
 end;
@@ -456,7 +459,7 @@ begin
     raise exception ''El correo no tiene una cuenta creada en Supabase Auth. Crea primero la cuenta y vuelve a intentarlo'';
   end if;
 
-  if p_rol not in (''admin'', ''operador'') then
+  if p_rol <> ''admin'' and p_rol <> ''operador'' then
     raise exception ''El tipo de acceso debe ser administrador o usuario por módulos'';
   end if;
 
@@ -467,8 +470,9 @@ begin
   requested_role := case when existing_role = ''owner'' then ''owner'' else p_rol end;
 
   if target_user_id = auth.uid()
-     and existing_role in (''owner'', ''admin'')
-     and requested_role not in (''owner'', ''admin'') then
+     and (existing_role = ''owner'' or existing_role = ''admin'')
+     and requested_role <> ''owner''
+     and requested_role <> ''admin'' then
     raise exception ''No puedes quitarte tus propios permisos administrativos'';
   end if;
 
@@ -486,7 +490,7 @@ begin
   delete from public.usuario_permisos up
   where up.empresa_id = p_empresa_id and up.user_id = target_user_id;
 
-  if requested_role not in (''owner'', ''admin'') then
+  if requested_role <> ''owner'' and requested_role <> ''admin'' then
     insert into public.usuario_permisos (empresa_id, user_id, modulo, permitido)
     select p_empresa_id, target_user_id, requested.module_key, true
     from (
