@@ -96,3 +96,9 @@ Si una cotización o presupuesto en UF falla con `22P02` o indica que un decimal
 `13_hardening_cotizaciones_decimales.sql`
 
 Ese patch es no destructivo. Convierte los campos monetarios a decimales, mantiene los folios como enteros y también corrige la tabla antigua `th_documentos` cuando existe.
+
+Para habilitar el inventario de EPP, ropa y las tallas de trabajadores, ejecuta:
+
+`14_epp_ropa_inventario.sql`
+
+Ese patch es no destructivo y agrega inventario por código/categoría/talla/color, alertas de stock mínimo y una ficha de tallas por trabajador.

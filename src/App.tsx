@@ -18,6 +18,7 @@ import { Login } from './pages/Login';
 import { EmpresasAsociadas } from './pages/EmpresasAsociadas';
 import { FlotaVehiculos } from './pages/FlotaVehiculos';
 import { PublicacionesProductos } from './pages/PublicacionesProductos';
+import { EppRopa } from './pages/EppRopa';
 
 function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
@@ -99,6 +100,7 @@ export default function App(){
   {page==='google-ads' && <GoogleAds/>}
   {page==='maquinaria' && <Maquinaria/>}
   {page==='repuestos' && <Repuestos/>}
+  {page==='epp-ropa' && <EppRopa/>}
   {page==='auditorias' && <Auditorias/>}
   {page==='importar' && <Importar/>}
  </Layout>

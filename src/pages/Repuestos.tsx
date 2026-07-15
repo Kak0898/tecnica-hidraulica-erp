@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 
@@ -137,7 +138,12 @@ export function Repuestos() {
 
   return (
     <div>
-      <h2 className="text-3xl font-bold mb-6">Repuestos</h2>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-3xl font-bold">Repuestos</h2>
+        <a href="/formatos/formato-inventario-repuestos.xlsx" download className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-800 hover:bg-emerald-100">
+          <Download size={17} /> Descargar formato inventario repuestos
+        </a>
+      </div>
 
       <Card>
         <div className="grid md:grid-cols-4 gap-3 mb-4">

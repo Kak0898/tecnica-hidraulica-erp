@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
+import { BarChart3, Boxes, Building2, CarFront, ChevronDown, ClipboardCheck, FileSpreadsheet, FileText, Gauge, Handshake, HardHat, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UsersRound, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { supabase } from '../lib/supabase';
 
@@ -31,6 +31,7 @@ const groups = [
       { key: 'flota-vehiculos', label: 'Flota de vehículos', icon: CarFront },
       { key: 'maquinaria', label: 'Maquinaria', icon: Boxes },
       { key: 'repuestos', label: 'Repuestos', icon: PackageSearch },
+      { key: 'epp-ropa', label: 'EPP y ropa', icon: Shirt },
       { key: 'auditorias', label: 'Auditorías', icon: ClipboardCheck },
       { key: 'importar', label: 'Importar Excel', icon: FileSpreadsheet },
     ],

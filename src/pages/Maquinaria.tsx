@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Camera, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { Camera, Download, Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 
@@ -619,7 +619,12 @@ export function Maquinaria() {
 
   return (
     <div className="pb-6">
-      <h2 className="mb-4 text-2xl font-bold md:mb-6 md:text-3xl">Maquinaria</h2>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between md:mb-6">
+        <h2 className="text-2xl font-bold md:text-3xl">Maquinaria</h2>
+        <a href="/formatos/formato-inventario-maquinaria.xlsx" download className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-800 hover:bg-emerald-100">
+          <Download size={17} /> Descargar formato inventario maquinaria
+        </a>
+      </div>
 
       <Card>
         <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">

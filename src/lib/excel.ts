@@ -30,7 +30,42 @@ const knownHeaderKeys = new Set([
   'unit',
   'proveedor',
   'supplier',
+  'talla',
+  'stockminimo',
+  'observaciones',
+  'tallapolera',
+  'tallapantalon',
+  'tallazapato',
+  'tallaoverol',
+  'tallageologo',
 ])
+
+export type ExcelSheetData = {
+  name: string
+  matrix: unknown[][]
+}
+
+export type EppImportRow = {
+  code: string
+  category: string
+  name: string
+  talla: string
+  color: string
+  stock: number
+  min_stock: number
+  location: string
+  estado: string
+  notes: string
+}
+
+export type EppWorkerSizeRow = {
+  nombre: string
+  talla_polera: string
+  talla_pantalon: string
+  talla_zapato: string
+  talla_overol: string
+  talla_geologo: string
+}
 
 function limpiarClave(value: string) {
   return String(value)
@@ -67,14 +102,7 @@ function findHeaderRow(rows: unknown[][]) {
   return rows.findIndex((row) => row.some(hasCellValue))
 }
 
-function rowsFromWorksheet(worksheet: XLSX.WorkSheet) {
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
-    raw: false,
-  })
-
+export function rowsFromExcelMatrix(matrix: unknown[][]) {
   const headerIndex = findHeaderRow(matrix)
 
   if (headerIndex < 0) return []
@@ -97,6 +125,44 @@ function rowsFromWorksheet(worksheet: XLSX.WorkSheet) {
         return result
       }, {}),
     )
+}
+
+function matrixFromWorksheet(worksheet: XLSX.WorkSheet) {
+  return XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+    header: 1,
+    defval: '',
+    blankrows: false,
+    raw: false,
+  })
+}
+
+function rowsFromWorksheet(worksheet: XLSX.WorkSheet) {
+  return rowsFromExcelMatrix(matrixFromWorksheet(worksheet))
+}
+
+export function readExcelWorkbookBuffer(buffer: ArrayBuffer | Uint8Array): ExcelSheetData[] {
+  const workbook = XLSX.read(buffer, { type: 'array' })
+
+  return workbook.SheetNames.map((name) => ({
+    name,
+    matrix: matrixFromWorksheet(workbook.Sheets[name]),
+  }))
+}
+
+export async function readExcelWorkbook(file: File): Promise<ExcelSheetData[]> {
+  return readExcelWorkbookBuffer(await file.arrayBuffer())
+}
+
+export function findExcelSheet(
+  sheets: ExcelSheetData[],
+  patterns: string[],
+  fallbackIndex = 0,
+) {
+  const normalizedPatterns = patterns.map(limpiarClave)
+  return sheets.find((sheet) => {
+    const normalizedName = limpiarClave(sheet.name)
+    return normalizedPatterns.some((pattern) => normalizedName.includes(pattern))
+  }) ?? sheets[fallbackIndex] ?? sheets[0]
 }
 
 export function readExcelBuffer(buffer: ArrayBuffer | Uint8Array, sheetIndex = 0): any[] {
@@ -289,5 +355,154 @@ export function normalizeSparePartRow(row: any) {
     unit: texto(get(row, ['UNIT', 'UNIDAD', 'unit', 'unidad'])) || 'unidad',
     supplier: texto(get(row, ['SUPPLIER', 'PROVEEDOR', 'supplier', 'proveedor'])),
     notes: texto(get(row, ['NOTES', 'NOTAS', 'OBSERVACIONES', 'notes', 'notas', 'observaciones'])),
+  }
+}
+
+const cantidadesEnPalabras: Record<string, number> = {
+  CERO: 0,
+  UNO: 1,
+  UNA: 1,
+  DOS: 2,
+  TRES: 3,
+  CUATRO: 4,
+  CINCO: 5,
+  SEIS: 6,
+  SIETE: 7,
+  OCHO: 8,
+  NUEVE: 9,
+  DIEZ: 10,
+}
+
+function cantidadEpp(value: unknown) {
+  const raw = texto(value).toUpperCase()
+  const word = raw.split(/\s+/).find((part) => cantidadesEnPalabras[part] !== undefined)
+  if (word) return cantidadesEnPalabras[word]
+
+  const parsed = Number(raw.replace(/[^\d,.-]/g, '').replace(',', '.'))
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0
+}
+
+function codigoEpp(category: unknown, name: unknown, talla: unknown, color: unknown) {
+  const identity = [category, name, talla, color]
+    .map(slug)
+    .filter((part, index, parts) => Boolean(part) && part !== parts[index - 1])
+    .join('-')
+  return identity ? `EPP-${identity}` : ''
+}
+
+export function normalizeEppRow(row: any): EppImportRow {
+  const category = texto(get(row, ['CATEGORÍA', 'CATEGORIA', 'CATEGORY', 'categoría', 'categoria', 'category']))
+  const talla = texto(get(row, ['TALLA', 'talla']))
+  const color = texto(get(row, ['COLOR', 'color']))
+  const name = texto(get(row, ['NOMBRE', 'NAME', 'ARTÍCULO', 'ARTICULO', 'nombre', 'name', 'artículo', 'articulo'])) || category
+  const stock = cantidadEpp(get(row, ['CANTIDAD', 'CANT. DISPONIBLE', 'CANT DISPONIBLE', 'STOCK', 'cantidad', 'cant. disponible', 'cant disponible', 'stock']))
+  const rawEstado = texto(get(row, ['ESTADO', 'estado'])).toLowerCase()
+
+  return {
+    code: texto(get(row, ['CÓDIGO', 'CODIGO', 'CODE', 'código', 'codigo', 'code'])) || codigoEpp(category, name, talla, color),
+    category,
+    name,
+    talla,
+    color,
+    stock,
+    min_stock: cantidadEpp(get(row, ['STOCK MÍNIMO', 'STOCK MINIMO', 'MÍNIMO', 'MINIMO', 'stock mínimo', 'stock minimo', 'mínimo', 'minimo'])),
+    location: texto(get(row, ['UBICACIÓN', 'UBICACION', 'LOCATION', 'ubicación', 'ubicacion', 'location'])),
+    estado: rawEstado || (stock > 0 ? 'disponible' : 'agotado'),
+    notes: texto(get(row, ['OBSERVACIONES', 'NOTAS', 'NOTES', 'observaciones', 'notas', 'notes'])),
+  }
+}
+
+function isStructuredEppHeader(row: unknown[]) {
+  const keys = new Set(row.map((value) => limpiarClave(texto(value))))
+  return keys.has('categoria') && (keys.has('cantidad') || keys.has('stock')) && (keys.has('talla') || keys.has('nombre'))
+}
+
+function parseStructuredEppSheet(matrix: unknown[][]) {
+  const headerIndex = matrix.slice(0, 40).findIndex(isStructuredEppHeader)
+  if (headerIndex < 0) return []
+
+  return rowsFromExcelMatrix(matrix.slice(headerIndex)).map(normalizeEppRow)
+}
+
+function parseOriginalEppSheet(matrix: unknown[][]) {
+  const rows: EppImportRow[] = []
+  let category = ''
+
+  matrix.forEach((sourceRow) => {
+    const [rawTalla, rawColor, rawCantidad, rawUbicacion] = sourceRow
+    const talla = texto(rawTalla)
+    const color = texto(rawColor)
+    const cantidad = texto(rawCantidad)
+    const ubicacion = texto(rawUbicacion)
+    const key = limpiarClave(talla)
+
+    if (talla && !color && !cantidad && !ubicacion && key !== 'talla') {
+      category = talla
+      return
+    }
+
+    if (!category || !talla || key === 'talla') return
+
+    rows.push(normalizeEppRow({
+      CATEGORÍA: category,
+      NOMBRE: category,
+      TALLA: talla,
+      COLOR: color,
+      CANTIDAD: cantidad,
+      UBICACIÓN: ubicacion,
+    }))
+  })
+
+  return rows
+}
+
+function parseWorkerSizesSheet(matrix: unknown[][]): EppWorkerSizeRow[] {
+  const headerIndex = matrix.slice(0, 40).findIndex((row) => {
+    const keys = new Set(row.map((value) => limpiarClave(texto(value))))
+    return keys.has('nombre') && keys.has('tallapolera')
+  })
+
+  if (headerIndex < 0) return []
+
+  const headers = matrix[headerIndex].map((value) => limpiarClave(texto(value)))
+  const indexOf = (key: string) => headers.indexOf(key)
+  const nombreIndex = indexOf('nombre')
+
+  return matrix
+    .slice(headerIndex + 1)
+    .filter((row) => nombreIndex >= 0 && hasCellValue(row[nombreIndex]))
+    .map((row) => ({
+      nombre: texto(row[nombreIndex]),
+      talla_polera: texto(row[indexOf('tallapolera')]),
+      talla_pantalon: texto(row[indexOf('tallapantalon')]),
+      talla_zapato: texto(row[indexOf('tallazapato')]),
+      talla_overol: texto(row[indexOf('tallaoverol')]),
+      talla_geologo: texto(row[indexOf('tallageologo')]),
+    }))
+}
+
+function uniqueBy<T>(rows: T[], keyFor: (row: T) => string) {
+  const unique = new Map<string, T>()
+  rows.forEach((row) => {
+    const key = keyFor(row)
+    if (key) unique.set(key, row)
+  })
+  return Array.from(unique.values())
+}
+
+export function normalizeEppWorkbook(sheets: ExcelSheetData[]) {
+  const inventorySheet = findExcelSheet(sheets, ['epp', 'ropa'], 2)
+  const structuredItems = inventorySheet ? parseStructuredEppSheet(inventorySheet.matrix) : []
+  const items = structuredItems.length
+    ? structuredItems
+    : inventorySheet
+      ? parseOriginalEppSheet(inventorySheet.matrix)
+      : []
+
+  const workerSizes = sheets.flatMap((sheet) => parseWorkerSizesSheet(sheet.matrix))
+
+  return {
+    items: uniqueBy(items, (row) => row.code.toLocaleUpperCase('es-CL')),
+    workerSizes: uniqueBy(workerSizes, (row) => row.nombre.toLocaleUpperCase('es-CL')),
   }
 }
