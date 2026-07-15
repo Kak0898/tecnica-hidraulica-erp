@@ -347,32 +347,31 @@ set search_path = public
 as '
 declare
   relation_data jsonb;
-  related_empresa uuid;
   related_id uuid;
 begin
   relation_data := to_jsonb(new);
   related_id := nullif(relation_data ->> ''persona_id'', '''')::uuid;
-  if related_id is not null then
-    select p.empresa_id into related_empresa from public.personas p where p.id = related_id;
-    if related_empresa is null or related_empresa <> new.empresa_id then
-      raise exception ''La persona no pertenece a la empresa activa'';
-    end if;
+  if related_id is not null and not exists (
+    select 1 from public.personas p
+    where p.id = related_id and p.empresa_id = new.empresa_id
+  ) then
+    raise exception ''La persona no pertenece a la empresa activa'';
   end if;
 
   related_id := nullif(relation_data ->> ''contrato_id'', '''')::uuid;
-  if related_id is not null then
-    select c.empresa_id into related_empresa from public.rrhh_contratos c where c.id = related_id;
-    if related_empresa is null or related_empresa <> new.empresa_id then
-      raise exception ''El contrato no pertenece a la empresa activa'';
-    end if;
+  if related_id is not null and not exists (
+    select 1 from public.rrhh_contratos c
+    where c.id = related_id and c.empresa_id = new.empresa_id
+  ) then
+    raise exception ''El contrato no pertenece a la empresa activa'';
   end if;
 
   related_id := nullif(relation_data ->> ''tipo_documento_id'', '''')::uuid;
-  if related_id is not null then
-    select td.empresa_id into related_empresa from public.rrhh_tipos_documento td where td.id = related_id;
-    if related_empresa is null or related_empresa <> new.empresa_id then
-      raise exception ''El tipo de documento no pertenece a la empresa activa'';
-    end if;
+  if related_id is not null and not exists (
+    select 1 from public.rrhh_tipos_documento td
+    where td.id = related_id and td.empresa_id = new.empresa_id
+  ) then
+    raise exception ''El tipo de documento no pertenece a la empresa activa'';
   end if;
 
   return new;
