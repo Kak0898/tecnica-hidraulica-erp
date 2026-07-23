@@ -45,13 +45,23 @@ export function parseSelect(value = '*') {
 async function getColumns(client, table) {
   if (columnCache.has(table)) return columnCache.get(table)
   const result = await client.query(
-    `select column_name from information_schema.columns where table_schema = 'public' and table_name = $1`,
+    `select column_name, data_type
+       from information_schema.columns
+      where table_schema = 'public' and table_name = $1`,
     [table],
   )
   const columns = new Set(result.rows.map((row) => row.column_name))
   if (!columns.size) throw new Error(`La tabla ${table} no existe en PostgreSQL.`)
+  columns.jsonColumns = new Set(
+    result.rows.filter((row) => ['json', 'jsonb'].includes(row.data_type)).map((row) => row.column_name),
+  )
   columnCache.set(table, columns)
   return columns
+}
+
+export function serializeColumnValue(columns, column, value) {
+  if (value == null || !columns?.jsonColumns?.has(column) || typeof value === 'string') return value
+  return JSON.stringify(value)
 }
 
 function selectedSql(fields, columns) {
@@ -253,7 +263,8 @@ async function executeInsert(client, userId, body, auth) {
   if (!insertColumns.length) throw new Error('No hay datos válidos para guardar.')
   const params = []
   const values = rows.map((row) => `(${insertColumns.map((column) => {
-    params.push(Object.prototype.hasOwnProperty.call(row, column) ? row[column] : null)
+    const value = Object.prototype.hasOwnProperty.call(row, column) ? row[column] : null
+    params.push(serializeColumnValue(columns, column, value))
     return `$${params.length}`
   }).join(', ')})`)
   let conflict = ''
@@ -284,7 +295,7 @@ async function executeUpdateOrDelete(client, userId, body, auth) {
     const entries = Object.entries(row)
     if (!entries.length) throw new Error('No hay datos válidos para actualizar.')
     const assignments = entries.map(([column, value]) => {
-      params.push(value)
+      params.push(serializeColumnValue(columns, column, value))
       return `${identifier(column)} = $${params.length}`
     })
     prefix = `update ${identifier(body.table, 'tabla')} set ${assignments.join(', ')}`

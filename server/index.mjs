@@ -125,6 +125,13 @@ app.post('/api/data/query', authenticate, async (req, res) => {
   try {
     res.json(await executeDataQuery(req.user.id, req.body))
   } catch (error) {
+    console.error('[api/data/query]', {
+      table: req.body?.table,
+      action: req.body?.action,
+      code: error?.code,
+      message: error?.message,
+      detail: error?.detail,
+    })
     const formatted = error.status
       ? { status: error.status, code: error.code || 'API_ERROR', message: error.message }
       : databaseError(error)
