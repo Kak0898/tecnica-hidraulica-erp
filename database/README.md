@@ -9,7 +9,7 @@ sudo -u postgres psql
 ```
 
 ```sql
-create user intranet with password 'CAMBIAR_CLAVE_SEGURA';
+create user intranet with password 'CAMBIAR_CLAVE_SEGURA' bypassrls;
 do $$
 begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
@@ -21,13 +21,17 @@ begin
 end
 $$;
 grant authenticated to intranet;
+grant usage on schema auth to authenticated;
+grant select, insert, update, delete on auth.users to authenticated;
 create database intranet owner intranet;
 \q
 ```
 
-Los roles se crean una sola vez por servidor PostgreSQL. Si ya existen, ejecuta
-solamente el `grant authenticated to intranet;`. La API cambia localmente al rol
-`authenticated` para que PostgreSQL aplique las políticas RLS en cada petición.
+Los roles se crean una sola vez por servidor PostgreSQL. Si el usuario ya existe,
+prepáralo con `alter role intranet bypassrls;`, los `grant` anteriores y una clave
+segura. `intranet` es un rol técnico exclusivo del servidor: nunca se entrega al
+navegador. La API cambia localmente al rol `authenticated` para que PostgreSQL
+aplique las políticas RLS en cada petición de usuario.
 
 Configura la misma conexión en `DATABASE_URL`, ejecuta `npm run db:init` y luego `npm run db:seed`.
 

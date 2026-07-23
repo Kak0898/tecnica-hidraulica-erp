@@ -74,6 +74,9 @@ create table if not exists storage.objects (
 alter table storage.objects enable row level security;
 grant usage on schema public, auth, storage to authenticated, anon;
 grant execute on function auth.uid() to authenticated, anon;
+-- La API es la única que accede directamente a las cuentas. El navegador nunca
+-- recibe estas credenciales ni dispone de una conexión PostgreSQL.
+grant select, insert, update, delete on auth.users to authenticated;
 grant select on storage.buckets to authenticated, anon;
 grant select, insert, update, delete on storage.objects to authenticated;
 

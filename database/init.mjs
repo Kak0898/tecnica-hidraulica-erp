@@ -13,8 +13,9 @@ const pool = new pg.Pool({
 })
 
 try {
-  const identity = await pool.query(`select rolsuper from pg_roles where rolname = current_user`)
+  const identity = await pool.query(`select rolsuper, rolbypassrls from pg_roles where rolname = current_user`)
   const isSuperuser = identity.rows[0]?.rolsuper === true
+  const bypassesRls = identity.rows[0]?.rolbypassrls === true
   const authRole = await pool.query(`select 1 from pg_roles where rolname = 'authenticated'`)
   if (!isSuperuser && !authRole.rowCount) {
     throw new Error('Falta el rol PostgreSQL authenticated. Créalo como postgres y ejecuta: grant authenticated to USUARIO_BASE;')
@@ -23,6 +24,9 @@ try {
     const membership = await pool.query(`select pg_has_role(current_user, 'authenticated', 'member') as allowed`)
     if (membership.rows[0]?.allowed !== true) {
       throw new Error('El usuario de DATABASE_URL no pertenece al rol authenticated. Ejecuta como postgres: grant authenticated to USUARIO_BASE;')
+    }
+    if (!bypassesRls) {
+      throw new Error('El usuario técnico de DATABASE_URL necesita BYPASSRLS. Ejecuta como postgres: alter role USUARIO_BASE bypassrls;')
     }
   }
   const existing = await pool.query(`select to_regclass('public.empresas') as table_name`)

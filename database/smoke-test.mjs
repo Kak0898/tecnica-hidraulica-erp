@@ -34,6 +34,13 @@ try {
   )
   assert.equal(tables.rows[0]?.count, 46, 'El esquema debe crear las 46 tablas públicas esperadas.')
 
+  // La conexión privada de la API puede preparar cuentas y consultar membresías.
+  // Cada petición de usuario cambia después al rol `authenticated`, donde RLS
+  // vuelve a aislar empresas y permisos.
+  await database.exec(`create role intranet_service login inherit bypassrls`)
+  await database.exec(`grant authenticated to intranet_service`)
+  await database.exec(`set role intranet_service`)
+
   await database.query(
     `insert into auth.users (id, email) values ($1, $2), ($3, $4)`,
     [adminId, 'admin@test.cl', importerId, 'importador@test.cl'],

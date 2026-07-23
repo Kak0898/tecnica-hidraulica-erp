@@ -14,6 +14,20 @@ const pool = new pg.Pool({
 const client = await pool.connect()
 
 try {
+  const capabilities = await client.query(
+    `select r.rolsuper,
+            r.rolbypassrls,
+            has_table_privilege(current_user, 'auth.users', 'select,insert,update') as auth_users_access
+       from pg_roles r
+      where r.rolname = current_user`,
+  )
+  const capability = capabilities.rows[0]
+  if (capability?.rolsuper !== true && capability?.rolbypassrls !== true) {
+    throw new Error('El usuario técnico de DATABASE_URL necesita BYPASSRLS. Ejecuta como postgres: ALTER ROLE USUARIO_BASE BYPASSRLS;')
+  }
+  if (capability?.auth_users_access !== true) {
+    throw new Error('El usuario técnico no puede administrar auth.users. Ejecuta como postgres el GRANT indicado en database/README.md.')
+  }
   await client.query('begin')
   const email = process.env.ADMIN_EMAIL.trim().toLowerCase()
   const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12)

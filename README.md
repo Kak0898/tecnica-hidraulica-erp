@@ -24,7 +24,9 @@ El navegador nunca recibe la contraseña de PostgreSQL. La API valida la sesión
 - Node.js 20 o superior.
 - PostgreSQL 15 o superior.
 - Una base vacía cuyo propietario sea el usuario definido en `DATABASE_URL`.
-- Ese usuario debe pertenecer al rol PostgreSQL `authenticated` (consulta `database/README.md`).
+- Ese usuario técnico debe usar `BYPASSRLS` y pertenecer al rol PostgreSQL
+  `authenticated` (consulta `database/README.md`). La API cambia a
+  `authenticated` dentro de cada operación del usuario para aplicar RLS.
 
 ## Instalación rápida
 
