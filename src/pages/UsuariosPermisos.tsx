@@ -31,25 +31,27 @@ const presets: Array<{ label: string; modules: ModuleKey[] }> = [
 function permissionsError(error: { code?: string; message?: string } | null) {
   if (!error) return ''
   if (/vincular_usuario_persona|rrhh_personas|persona_id|persona_nombre/i.test(error.message || '')) {
-    return 'Falta ejecutar el archivo SQL 17_rrhh_escalable.sql en Supabase.'
+    return 'Falta instalar el módulo de Recursos Humanos en PostgreSQL.'
   }
   if (/listar_usuarios_empresa_detalle|actualizar_nombre_usuario_empresa/i.test(error.message || '')) {
-    return 'Falta ejecutar el archivo SQL 16_creacion_usuarios_perfiles.sql en Supabase.'
+    return 'Falta instalar el módulo de perfiles de usuario en PostgreSQL.'
   }
   if (error.code === 'PGRST202' || /listar_usuarios_empresa|guardar_permisos_usuario|schema cache/i.test(error.message || '')) {
-    return 'Falta ejecutar el archivo SQL 15_usuarios_permisos_modulos.sql en Supabase.'
+    return 'Falta instalar el módulo de permisos en PostgreSQL.'
   }
   return error.message || 'No fue posible completar la operación.'
 }
 
 async function functionErrorMessage(error: unknown) {
-  const fallback = error instanceof Error ? error.message : 'No fue posible crear la cuenta.'
+  const fallback = error instanceof Error
+    ? error.message
+    : String((error as { message?: string } | null)?.message || 'No fue posible crear la cuenta.')
   const errorName = (error as { name?: string } | null)?.name || ''
   if (
     /FunctionsFetchError/i.test(errorName)
     || /Failed to send a request to the Edge Function|Failed to fetch/i.test(fallback)
   ) {
-    return 'No se pudo contactar la función segura crear-usuario-empresa. Debe desplegarse en Supabase antes de crear cuentas.'
+    return 'No se pudo contactar la API segura de usuarios. Verifica que el backend Node.js esté iniciado.'
   }
   const context = (error as { context?: Response } | null)?.context
   if (!context) return fallback
@@ -247,7 +249,7 @@ export function UsuariosPermisos() {
   }
 
   if (!schemaReady) {
-    return <div className="space-y-5"><div><h2 className="text-3xl font-black text-slate-950">Usuarios y permisos</h2><p className="mt-2 text-slate-600">Control de acceso por empresa y sección.</p></div><Card className="border-amber-300 bg-amber-50"><div className="flex gap-3"><ShieldCheck className="mt-1 shrink-0 text-amber-700" /><div><h3 className="font-bold text-amber-950">Falta habilitar el módulo en Supabase</h3><p className="mt-2 text-sm leading-6 text-amber-900">Ejecuta el archivo <b>15_usuarios_permisos_modulos.sql</b>. Mientras no se ejecute, el sistema conserva el acceso anterior para no bloquear a los usuarios actuales.</p></div></div></Card></div>
+    return <div className="space-y-5"><div><h2 className="text-3xl font-black text-slate-950">Usuarios y permisos</h2><p className="mt-2 text-slate-600">Control de acceso por empresa y sección.</p></div><Card className="border-amber-300 bg-amber-50"><div className="flex gap-3"><ShieldCheck className="mt-1 shrink-0 text-amber-700" /><div><h3 className="font-bold text-amber-950">Falta preparar PostgreSQL</h3><p className="mt-2 text-sm leading-6 text-amber-900">Ejecuta <b>npm run db:init</b> para instalar el esquema completo antes de administrar accesos.</p></div></div></Card></div>
   }
 
   const editingOwner = editingUser?.rol === 'owner'

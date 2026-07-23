@@ -42,7 +42,7 @@ const stateLabels: Record<Vehiculo['estado'], string> = { operativo: 'Operativo'
 const propertyLabels: Record<Vehiculo['propiedad'], string> = { propio: 'Propio', leasing: 'Leasing', arrendado: 'Arrendado', comodato: 'Comodato' }
 
 function nullable(value: string) { return value.trim() || null }
-function moduleError(message: string) { return /vehiculos_empresa|schema cache|could not find/i.test(message) ? 'El módulo aún no está activado en la base de datos. Ejecuta el SQL 11_flota_empresas_asociadas.sql en Supabase.' : message }
+function moduleError(message: string) { return /vehiculos_empresa|schema cache|could not find/i.test(message) ? 'El módulo aún no está activado en PostgreSQL. Ejecuta npm run db:init en una base nueva.' : message }
 function daysUntil(value?: string | null) { if (!value) return null; const target = new Date(`${value}T12:00:00`); return Math.ceil((target.getTime() - Date.now()) / 86400000) }
 function isExpiring(value?: string | null) { const days = daysUntil(value); return days !== null && days <= 30 }
 function formatDate(value?: string | null) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString('es-CL') : 'Sin fecha' }

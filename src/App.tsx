@@ -43,15 +43,8 @@ function SinModulos() {
 
 function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' }) {
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
- const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
- const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
  const isPresupuesto = modo === 'presupuesto'
  const titulo = isPresupuesto ? 'Presupuestos' : 'Cotizaciones'
-
- if (supabaseUrl && supabaseAnonKey) {
-  window.localStorage.setItem('ERP_SUPABASE_URL', supabaseUrl)
-  window.localStorage.setItem('ERP_SUPABASE_ANON_KEY', supabaseAnonKey)
- }
 
  return <div className="space-y-4">
   <div className="rounded border border-slate-200 bg-white p-4 shadow-sm">

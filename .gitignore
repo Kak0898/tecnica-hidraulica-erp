@@ -4,5 +4,7 @@ dist
 .vercel
 .env*
 !.env.example
+uploads
+database/export
 .DS_Store
 *.tsbuildinfo

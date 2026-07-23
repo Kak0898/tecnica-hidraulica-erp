@@ -92,7 +92,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refreshEmpresa()
 
-    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event: string, session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } } | null) => {
       if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
       if (event === 'SIGNED_IN' && session?.user.id === currentUserIdRef.current) return
       window.setTimeout(() => {

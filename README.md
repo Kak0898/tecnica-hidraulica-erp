@@ -1,119 +1,121 @@
-# TH Control · Técnica Hidráulica
+# Intranet TH Control
 
-Base inicial del ERP propio para Técnica Hidráulica Ltda., preparada para evolucionar hacia una plataforma modular y multiempresa.
+Sistema interno multiempresa para Técnica Hidráulica. Esta versión funciona con una arquitectura propia:
 
-La versión actual incluye acceso por correo y contraseña, base multiempresa con seguridad por usuario, presupuestos/cotizaciones separados, órdenes de trabajo, Google Ads, fichas laborales, contratos, anexos, ausencias, documentos privados, horas extra, anticipos, pagos, liquidaciones, empresas asociadas, flota de vehículos y publicaciones multicanal de productos.
-
-## Objetivo
-
-Centralizar la operación técnica y comercial en una sola plataforma conectada a Supabase:
-
-- Historial de equipos
-- Inventario de maquinaria
-- Repuestos
-- Auditorías
-- Cotizaciones
-- Órdenes de trabajo
-- Portal clientes
-- QR por equipo
-- WhatsApp automático
-- Dashboard gerencial
-- CRM comercial
-- IA técnica
-- Google Ads con métricas y recomendaciones diarias
-- Trabajadores, horas extra, anticipos y liquidaciones
-- Contratos, anexos, vacaciones, licencias, documentos y alertas laborales
-- Catálogo comercial y enlaces de publicaciones por producto
-
-## Puesta en marcha
-
-### 1. Base de datos
-
-Para una base Supabase nueva, ejecutar completo:
-
-`supabase/schema.sql`
-
-Este archivo es el SQL integral y recrea las tablas del ERP. Para una base existente con datos, no volver a ejecutar `schema.sql`; ejecutar solamente:
-
-el patch incremental más reciente requerido, por ejemplo:
-
-`supabase/sql-editor/13_hardening_cotizaciones_decimales.sql`
-
-Para habilitar la creación administrada de usuarios en una base existente,
-ejecutar `supabase/sql-editor/16_creacion_usuarios_perfiles.sql` y desplegar:
-
-```bash
-npx supabase functions deploy crear-usuario-empresa
+```text
+React + Vite → API Node.js → PostgreSQL
 ```
 
-Para habilitar la base modular de Recursos Humanos, ejecutar después:
-
-`supabase/sql-editor/17_rrhh_escalable.sql`
-
-El patch 17 es incremental y no elimina datos. Agrega fichas ampliadas,
-contratos, anexos, ausencias, saldos de vacaciones, carpetas documentales
-privadas, alertas, auditoría y permisos separados por sección. En una base
-nueva se ejecuta `schema.sql` y luego el patch 17.
-
-### 2. Usuario y contraseña
-
-El primer propietario se crea desde Supabase Authentication. Después, los
-propietarios y administradores pueden crear nuevas cuentas directamente desde
-Usuarios y permisos, indicando nombre, correo, contraseña temporal, rol y
-secciones autorizadas.
-
-No se habilitó registro público: las cuentas las controla la administración de TH.
-
-### 3. Variables del sistema
-
-Copiar `.env.example` a `.env` y completar:
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-
-### 4. Ejecutar
-
-```bash
-npm install
-npm run dev
-```
+El navegador nunca recibe la contraseña de PostgreSQL. La API valida la sesión, la empresa activa y los permisos por módulo antes de leer o modificar información.
 
 ## Módulos incluidos
 
-Esta primera base conserva los módulos funcionales heredados:
+- Dashboard y Google Ads.
+- Clientes, empresas asociadas, presupuestos y cotizaciones.
+- Publicaciones, órdenes de trabajo, CRM y WhatsApp.
+- Fichas de trabajadores, contratos, anexos, ausencias, documentos y alertas.
+- Horas extra, anticipos, pagos y liquidaciones.
+- Flota, maquinaria, repuestos, EPP, auditorías e importación Excel.
+- Usuarios, roles y permisos por empresa.
+- Registro de consultas técnicas.
 
-- Maquinaria
-- Repuestos
-- Auditorías
-- Importación Excel/CSV
-- Dashboard
-- OCR de placas
-- Cotizaciones, integrado como módulo estático en `public/modulos/cotizaciones`
+## Requisitos
 
-El siguiente trabajo técnico es convertir esta base en un módulo ERP conectado:
+- Node.js 20 o superior.
+- PostgreSQL 15 o superior.
+- Una base vacía cuyo propietario sea el usuario definido en `DATABASE_URL`.
+- Ese usuario debe pertenecer al rol PostgreSQL `authenticated` (consulta `database/README.md`).
 
-1. Alinear el esquema Supabase con los campos reales usados por el frontend.
-2. Agregar soporte multiempresa con `empresa_id`.
-3. Agregar clientes y contactos.
-4. Asociar equipos a clientes.
-5. Crear historial técnico por equipo.
-6. Preparar QR por equipo.
-7. Conectar cotizaciones y órdenes de trabajo.
+## Instalación rápida
+
+Primero crea el usuario, los roles RLS y la base siguiendo
+[`database/README.md`](database/README.md). Luego instala la aplicación:
+
+```bash
+cd /var/www/desarrollo/intranet
+cp .env.example .env
+nano .env
+npm install
+npm run db:schema
+npm run db:init
+npm run db:seed
+npm run dev
+```
+
+La aplicación quedará disponible en `http://IP_DEL_SERVIDOR:5173`. La API utiliza el puerto `3001` y Vite la conecta automáticamente mediante proxy.
+
+## Variables principales
+
+```env
+VITE_API_URL=/api
+PORT=3001
+TRUST_PROXY=1
+DATABASE_URL=postgresql://intranet:CLAVE@127.0.0.1:5432/intranet
+DATABASE_SSL=false
+JWT_SECRET=SECRETO_ALEATORIO_DE_AL_MENOS_32_CARACTERES
+UPLOAD_DIR=./uploads
+
+ADMIN_EMAIL=admin@empresa.cl
+ADMIN_PASSWORD=CONTRASENA_TEMPORAL
+ADMIN_NAME=Administrador General
+COMPANY_NAME=Técnica Hidráulica Ltda.
+COMPANY_SLUG=tecnica-hidraulica
+```
+
+No publiques `.env` ni uses la contraseña de PostgreSQL en variables `VITE_*`.
+
+## Base de datos
+
+- `database/postgresql.sql`: SQL integral para PostgreSQL independiente.
+- `npm run db:init`: instala el SQL sobre una base nueva.
+- `npm run db:seed`: crea o actualiza el primer propietario y la empresa inicial.
+- `supabase/sql-editor`: conserva el historial de parches del sistema anterior.
+
+`db:init` se detiene si detecta una instalación existente. Solo permite una recreación destructiva cuando se define conscientemente `ALLOW_DATABASE_RESET=true`.
+
+## Migrar la información del Supabase anterior
+
+Primero instala el esquema en una base PostgreSQL vacía. Después completa en `.env`:
+
+```env
+SUPABASE_DATABASE_URL=postgresql://...
+SUPABASE_URL=https://PROYECTO.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=CLAVE_PRIVADA_SOLO_EN_EL_SERVIDOR
+```
+
+Ejecuta:
+
+```bash
+npm run db:migrate:supabase
+npm run storage:migrate:supabase
+```
+
+El primer comando copia usuarios, hashes de contraseña y datos empresariales. El segundo descarga logos y documentos privados al directorio `uploads`.
+
+## Desarrollo y producción
+
+```bash
+# Desarrollo: API y Vite juntos
+npm run dev
+
+# Validación y compilación
+npm run build
+
+# Servir la compilación desde Node.js
+npm start
+```
+
+En un servidor se recomienda ejecutar `npm start` mediante systemd o PM2 y utilizar Nginx como proxy HTTPS hacia `127.0.0.1:3001`.
+
+## Seguridad
+
+- Contraseñas cifradas con bcrypt.
+- Sesiones firmadas mediante JWT.
+- Autorización por empresa, rol y módulo en la API.
+- Políticas RLS conservadas en PostgreSQL como segunda barrera.
+- Archivos de RR.HH. privados mediante enlaces temporales firmados.
+- Creación de usuarios administrada por propietarios y administradores.
 
 ## Remuneraciones
 
-La calculadora usa parámetros referenciales y editables para Chile 2026. La liquidación final debe verificarse en Previred o con asesoría contable, especialmente UF, impuesto único, mutualidad y cambios previsionales según el período.
-
-## Diseño escalable
-
-Los módulos, permisos y datos están separados por `empresa_id`. Los nombres y
-la identidad visual de TH pertenecen a esta implementación; las entidades de
-RR.HH. y el catálogo `sistema_modulos` son reutilizables para una futura versión
-comercial independiente y multiempresa.
-
-## Deploy Vercel
-
-Agregar variables de entorno en Vercel:
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+La calculadora contiene parámetros referenciales para Chile 2026. La liquidación definitiva debe validarse con Previred o asesoría contable, especialmente UF, impuesto único, mutualidad y cambios previsionales.

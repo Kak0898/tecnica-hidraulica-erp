@@ -100,7 +100,7 @@ export function RrhhAusencias() {
   }
 
   async function saveAbsence() {
-    if (!schemaReady) return setMessage('Primero ejecuta el SQL 17_rrhh_escalable.sql en Supabase.')
+    if (!schemaReady) return setMessage('Primero instala el esquema completo en PostgreSQL con npm run db:init.')
     if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar.')
     if (!form.persona_id) return setMessage('Selecciona el trabajador asociado a la ausencia.')
     if (!form.fecha_inicio || !form.fecha_termino) return setMessage('Completa las fechas de inicio y término.')

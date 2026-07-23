@@ -53,7 +53,7 @@ export function RrhhPersonas() {
       setPeople((peopleResult.data || []) as PersonaRrhh[])
     }
     if (!alertsResult.error) setAlerts((alertsResult.data || []) as RrhhAlert[])
-    if (!absencesResult.error) setAbsentPersonIds([...new Set((absencesResult.data || []).map((item) => String(item.persona_id)))])
+    if (!absencesResult.error) setAbsentPersonIds([...new Set<string>((absencesResult.data || []).map((item: { persona_id: string }) => String(item.persona_id)))])
     else setAbsentPersonIds([])
     setLoading(false)
   }
@@ -105,7 +105,7 @@ export function RrhhPersonas() {
   }
 
   async function savePerson() {
-    if (!schemaReady) return setMessage('Primero ejecuta el SQL 17_rrhh_escalable.sql en Supabase.')
+    if (!schemaReady) return setMessage('Primero instala el esquema completo en PostgreSQL con npm run db:init.')
     if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar la ficha.')
     if (form.nombre.trim().length < 3) return setMessage('Ingresa el nombre completo del trabajador.')
     if (form.fecha_termino && form.fecha_ingreso && form.fecha_termino < form.fecha_ingreso) return setMessage('La fecha de término no puede ser anterior a la fecha de ingreso.')

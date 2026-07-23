@@ -54,7 +54,7 @@ export const labelClass = 'text-sm font-bold text-slate-700'
 export function databaseMessage(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return ''
   if (error.code === '42P01' || error.code === 'PGRST205' || /rrhh_|column .* does not exist|schema cache/i.test(error.message || '')) {
-    return 'Falta ejecutar el archivo SQL 17_rrhh_escalable.sql en Supabase.'
+    return 'Falta instalar el módulo de Recursos Humanos en PostgreSQL.'
   }
   if (error.code === '23505') return 'Ya existe un registro con esos datos en la empresa activa.'
   if (error.code === '23514') return 'Uno de los valores no cumple las reglas del sistema. Revisa fechas, estados y montos.'
@@ -115,7 +115,7 @@ export function SchemaWarning() {
   return <Card className="border-amber-300 bg-amber-50">
     <div className="flex gap-3 text-amber-950">
       <AlertTriangle className="mt-0.5 shrink-0" />
-      <div><h3 className="font-black">Falta preparar Recursos Humanos en Supabase</h3><p className="mt-1 text-sm leading-6">Ejecuta completo el archivo <b>17_rrhh_escalable.sql</b>. El sistema no intentará guardar información hasta que la estructura esté disponible.</p></div>
+      <div><h3 className="font-black">Falta preparar Recursos Humanos en PostgreSQL</h3><p className="mt-1 text-sm leading-6">Ejecuta <b>npm run db:init</b>. El sistema no intentará guardar información hasta que la estructura esté disponible.</p></div>
     </div>
   </Card>
 }

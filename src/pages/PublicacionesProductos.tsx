@@ -115,7 +115,7 @@ function formatMoney(value?: number | null, currency = 'CLP') {
 }
 function moduleError(message: string) {
   return /productos_comerciales|publicaciones_productos|schema cache|could not find/i.test(message)
-    ? 'El módulo aún no está activado en la base de datos. Ejecuta el SQL 12_publicaciones_productos.sql en Supabase.'
+    ? 'El módulo aún no está activado en PostgreSQL. Ejecuta npm run db:init en una base nueva.'
     : message
 }
 function productStatusClass(status: ProductStatus) {

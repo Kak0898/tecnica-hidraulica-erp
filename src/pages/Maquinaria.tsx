@@ -388,7 +388,7 @@ export function Maquinaria() {
 
       const rows = data || []
 
-      rows.forEach((machine) => {
+      rows.forEach((machine: { conteo?: string; code?: string }) => {
         maxConteo = Math.max(
           maxConteo,
           extraerNumero(machine.conteo),

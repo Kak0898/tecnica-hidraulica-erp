@@ -122,7 +122,7 @@ export function RrhhContratos() {
   }
 
   async function saveContract() {
-    if (!schemaReady) return setMessage('Primero ejecuta el SQL 17_rrhh_escalable.sql en Supabase.')
+    if (!schemaReady) return setMessage('Primero instala el esquema completo en PostgreSQL con npm run db:init.')
     if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar.')
     if (!contractForm.persona_id) return setMessage('Selecciona el trabajador del contrato.')
     if (!contractForm.fecha_inicio) return setMessage('Indica la fecha de inicio del contrato.')

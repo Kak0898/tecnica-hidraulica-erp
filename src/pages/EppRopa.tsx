@@ -73,7 +73,7 @@ function generatedCode(item: EppItem) {
 function databaseMessage(error: { code?: string; message?: string } | null) {
   if (!error) return ''
   if (error.code === 'PGRST205' || /epp_items|epp_worker_sizes|schema cache/i.test(error.message || '')) {
-    return 'Falta habilitar el módulo EPP en Supabase. Ejecuta el archivo SQL 14_epp_ropa_inventario.sql y vuelve a cargar esta sección.'
+    return 'Falta habilitar el módulo EPP en PostgreSQL. Ejecuta npm run db:init y vuelve a cargar esta sección.'
   }
   return error.message || 'No fue posible completar la operación.'
 }
@@ -109,7 +109,7 @@ export function EppRopa() {
       setWorkers((workersResult.data || []) as WorkerSize[])
     }
 
-    setPersonNames((personsResult.data || []).map((person) => [person.nombre, person.apellidos].filter(Boolean).join(' ')))
+    setPersonNames((personsResult.data || []).map((person: { nombre?: string; apellidos?: string }) => [person.nombre, person.apellidos].filter(Boolean).join(' ')))
     setLoading(false)
   }
 

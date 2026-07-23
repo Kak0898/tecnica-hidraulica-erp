@@ -112,7 +112,7 @@ const defaultDoc = {
   dirty:true
 };
 
-let counterStatus = { type:'warn', text:'Número generado en modo local. Configura Supabase para varios computadores.' };
+let counterStatus = { type:'warn', text:'Número generado en modo local. Configura la API PostgreSQL para varios computadores.' };
 let saveStatus = { type:'warn', text:'Guarda el documento para activar PDF / Imprimir.' };
 let loadingNumber = false;
 let savingDoc = false;
@@ -170,15 +170,12 @@ function loadCurrent(){
 }
 
 function initSupabase(){
-  const cfg = window.ERP_SUPABASE || {};
-  if (!cfg.url) cfg.url = localStorage.getItem('ERP_SUPABASE_URL') || '';
-  if (!cfg.anonKey) cfg.anonKey = localStorage.getItem('ERP_SUPABASE_ANON_KEY') || '';
-  if (cfg.url && cfg.anonKey && window.supabase) {
-    supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey);
-    counterStatus = { type:'ok', text:'Supabase conectado para presupuestos y cotizaciones.' };
+  if (window.intranetApi) {
+    supabaseClient = window.intranetApi;
+    counterStatus = { type:'ok', text:'PostgreSQL conectado para presupuestos y cotizaciones.' };
     saveStatus = state.savedAt && !state.dirty
       ? { type:'ok', text:'Documento guardado. PDF / Imprimir habilitado.' }
-      : { type:'warn', text:`Supabase conectado. Guarda ${INITIAL_MODE === 'cotizacion' ? 'la cotización' : 'el presupuesto'} para habilitar el PDF.` };
+      : { type:'warn', text:`PostgreSQL conectado. Guarda ${INITIAL_MODE === 'cotizacion' ? 'la cotización' : 'el presupuesto'} para habilitar el PDF.` };
   }
 }
 
@@ -354,7 +351,7 @@ function delItem(i){delRefItem(0,i)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function canExport(){return Boolean(state.savedAt && !state.dirty)}
 function errorText(err){
-  if (err?.code === '22P02') return 'La base de datos rechazó un decimal porque una columna antigua está configurada como entero. Ejecuta el SQL 13_hardening_cotizaciones_decimales.sql y vuelve a guardar.';
+  if (err?.code === '22P02') return 'Uno de los campos tiene un formato inválido. Revisa el folio, las cantidades y los precios antes de volver a guardar.';
   return err?.message || err?.details || err?.hint || String(err || 'Error desconocido');
 }
 function cleanNoteLine(line){return String(line || '').trim().replace(/^\d+\s*\.-\s*/, '')}
@@ -613,7 +610,7 @@ async function reservePreNumber(){
       const { data, error } = await supabaseClient.rpc('next_erp_pre_cotizacion');
       if (error) throw error;
       state.preNumero = String(data);
-      counterStatus = { type:'ok', text:'Supabase conectado. Contador de presupuestos activo.' };
+      counterStatus = { type:'ok', text:'PostgreSQL conectado. Contador de presupuestos activo.' };
     } else {
       state.preNumero = localNextPreNumber();
       counterStatus = { type:'warn', text:'Modo local activo. Los presupuestos no son compartidos.' };
@@ -622,7 +619,7 @@ async function reservePreNumber(){
     console.error(err);
     if (supabaseClient) {
       state.preNumero = '';
-      counterStatus = { type:'bad', text:'No se pudo reservar el folio en Supabase. No se guardó para evitar números duplicados.' };
+      counterStatus = { type:'bad', text:'No se pudo reservar el folio en PostgreSQL. No se guardó para evitar números duplicados.' };
       persist();
       throw err;
     }
@@ -645,10 +642,10 @@ async function reserveNextNumber({force=false}={}){
       const { data, error } = await supabaseClient.rpc('next_erp_cotizacion');
       if (error) throw error;
       nextNum = Number(data);
-      counterStatus = { type:'ok', text:'Supabase conectado. Contador de cotizaciones activo.' };
+      counterStatus = { type:'ok', text:'PostgreSQL conectado. Contador de cotizaciones activo.' };
     } else {
       nextNum = localNextNumber();
-      counterStatus = { type:'warn', text:'Modo local activo. Configura Supabase para usar varios computadores.' };
+      counterStatus = { type:'warn', text:'Modo local activo. Configura PostgreSQL para usar varios computadores.' };
     }
 
     if (!validFolio(nextNum)) {
@@ -667,7 +664,7 @@ async function reserveNextNumber({force=false}={}){
       state.numeroReservado = false;
       state.dirty = true;
       state.savedAt = null;
-      counterStatus = { type:'bad', text:'No se pudo reservar el folio en Supabase. No se guardó para evitar números duplicados.' };
+      counterStatus = { type:'bad', text:'No se pudo reservar el folio en PostgreSQL. No se guardó para evitar números duplicados.' };
       persist();
       throw err;
     }
@@ -676,7 +673,7 @@ async function reserveNextNumber({force=false}={}){
     state.numeroReservado = true;
     state.dirty = true;
     state.savedAt = null;
-    counterStatus = { type:'bad', text:'Supabase no respondió. Se usó contador local de respaldo.' };
+    counterStatus = { type:'bad', text:'PostgreSQL no respondió. Se usó contador local de respaldo.' };
     persist();
   } finally {
     loadingNumber = false;
@@ -785,7 +782,7 @@ async function loadSavedDocs(){
     localStorage.setItem('th_saved', JSON.stringify(saved));
   } catch (err) {
     console.error(err);
-    saveStatus = { type:'bad', text:'No se pudo cargar documentos desde Supabase. Revisa tabla y políticas.' };
+    saveStatus = { type:'bad', text:'No se pudieron cargar documentos desde PostgreSQL. Revisa la API y la base de datos.' };
   }
   render();
 }
@@ -961,7 +958,7 @@ async function saveDoc(){
       actionMessage = state.numeroReservado
         ? 'Cotización guardada. Puede imprimir o guardar en PDF.'
         : 'Presupuesto guardado. Puede imprimirlo, enviarlo al cliente o crear una cotización vinculada.';
-      saveStatus = { type:'warn', text:`${actionMessage} Guardado local: para uso multiusuario necesitas Supabase.` };
+      saveStatus = { type:'warn', text:`${actionMessage} Guardado local: para uso multiusuario necesitas PostgreSQL.` };
       busyMessage = '';
       clearAutosave();
     }
@@ -999,7 +996,7 @@ async function deleteSaved(id){
   const found = saved.find(x=>String(x.id)===String(id));
   if (supabaseClient && found?.source === 'supabase') {
     const { error } = await supabaseClient.from('cotizacion_documentos').delete().eq('id', id);
-    if (error) { saveStatus = {type:'bad', text:'No se pudo borrar en Supabase.'}; render(); return; }
+    if (error) { saveStatus = {type:'bad', text:'No se pudo borrar en PostgreSQL.'}; render(); return; }
     await loadSavedDocs();
     return;
   }
@@ -1192,7 +1189,7 @@ function showBootError(err){
       <aside class="panel">
         <h1>Cotizaciones ERP</h1>
         <div class="status"><span class="dot bad"></span><span>Error al iniciar la aplicación.</span></div>
-        <p class="sub">Revisa la configuración de Supabase, la consola del navegador o vuelve a publicar todos los archivos del proyecto.</p>
+        <p class="sub">Revisa la conexión con la API PostgreSQL, la consola del navegador o vuelve a copiar todos los archivos del proyecto.</p>
         <pre class="small">${esc(err?.message || err)}</pre>
       </aside>
     </main>`;

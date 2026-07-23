@@ -1,34 +1,18 @@
-# Cotizaciones ERP
+# Presupuestos y cotizaciones
 
-Modulo estático incorporado al ERP con flujos separados para presupuestos y cotizaciones.
+El módulo se abre en dos modos:
 
-- `/modulos/cotizaciones/index.html?modo=presupuesto`: crea y administra presupuestos.
-- `/modulos/cotizaciones/index.html?modo=cotizacion`: crea cotizaciones independientes o vinculadas a un presupuesto guardado.
-- El vínculo al presupuesto y el perfil comercial del usuario quedan guardados en los datos del documento y en la metadata autenticada de Supabase.
+- `/modulos/cotizaciones/index.html?modo=presupuesto`
+- `/modulos/cotizaciones/index.html?modo=cotizacion`
 
-## Ubicacion
+Las cotizaciones pueden vincularse con un presupuesto guardado o marcarse como independientes. Los documentos, folios y datos comerciales se guardan mediante la API propia en PostgreSQL.
 
-Dentro del ERP queda disponible en:
+## Conexión
 
-`/modulos/cotizaciones/index.html`
-
-## Supabase
-
-Este modulo usa la misma base del ERP mediante:
-
-- `cotizacion_documentos`
-- `erp_counters`
-- `next_erp_pre_cotizacion()`
-- `next_erp_cotizacion()`
-- `emit_erp_cotizacion(bigint)`
-
-Configurar `config.js` con las credenciales publicas del proyecto Supabase:
+El módulo utiliza `api-client.js` y comparte la sesión iniciada en la intranet. La ruta predeterminada es:
 
 ```js
-window.ERP_SUPABASE = {
-  url: "https://TU-PROYECTO.supabase.co",
-  anonKey: "TU_ANON_KEY"
-};
+window.ERP_API_URL = "/api";
 ```
 
-Si `config.js` queda vacio, el modulo funciona en modo local del navegador, pero sin numeracion compartida.
+No se deben colocar credenciales de PostgreSQL ni secretos en este directorio.

@@ -56,7 +56,7 @@ function nullable(value: string) {
 
 function moduleError(message: string) {
   if (/empresas_asociadas|schema cache|could not find/i.test(message)) {
-    return 'El módulo aún no está activado en la base de datos. Ejecuta el SQL 11_flota_empresas_asociadas.sql en Supabase.'
+    return 'El módulo aún no está activado en PostgreSQL. Ejecuta npm run db:init en una base nueva.'
   }
   return message
 }

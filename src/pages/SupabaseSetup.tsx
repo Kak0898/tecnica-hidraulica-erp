@@ -78,7 +78,7 @@ export function SupabaseSetup() {
   }, [activeEmpresaId, empresas])
 
   const hasEnv = useMemo(() => {
-    return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+    return Boolean(import.meta.env.VITE_API_URL || '/api')
   }, [])
 
   async function load() {
@@ -160,7 +160,7 @@ export function SupabaseSetup() {
   useEffect(() => {
     load()
 
-    const { data } = supabase.auth.onAuthStateChange((event) => {
+    const { data } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') return
       window.setTimeout(() => {
         void load()
@@ -477,7 +477,7 @@ export function SupabaseSetup() {
             <div>
               <h3 className="font-bold text-slate-950">Variables</h3>
               <p className="mt-1 text-sm text-slate-600">
-                {hasEnv ? 'URL y anon key detectadas.' : 'Faltan variables Vite de Supabase.'}
+                {hasEnv ? 'API PostgreSQL configurada.' : 'Falta configurar VITE_API_URL.'}
               </p>
             </div>
           </div>

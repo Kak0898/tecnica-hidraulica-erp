@@ -112,7 +112,7 @@ export function RrhhDocumentos() {
   }
 
   async function saveDocument() {
-    if (!schemaReady) return setMessage('Primero ejecuta el SQL 17_rrhh_escalable.sql en Supabase.')
+    if (!schemaReady) return setMessage('Primero instala el esquema completo en PostgreSQL con npm run db:init.')
     if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar.')
     if (!documentForm.persona_id) return setMessage('Selecciona el trabajador del documento.')
     if (!documentForm.nombre.trim()) return setMessage('Escribe un nombre para identificar el documento.')
