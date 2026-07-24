@@ -109,6 +109,11 @@ npm start
 
 En un servidor se recomienda ejecutar `npm start` mediante systemd o PM2 y utilizar Nginx como proxy HTTPS hacia `127.0.0.1:3001`.
 
+Para trabajar desde VS Code y actualizar el servidor de desarrollo con Git,
+consulta [`deploy/git-auto-deploy.md`](deploy/git-auto-deploy.md). El flujo
+recomendado es hacer cambios en tu Mac, ejecutar `npm run build`, subir con
+`git push` y luego correr `npm run deploy:dev` dentro del servidor.
+
 ## Seguridad
 
 - Contraseñas cifradas con bcrypt.

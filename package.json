@@ -14,7 +14,8 @@
     "db:init": "node database/init.mjs",
     "db:seed": "node database/seed-admin.mjs",
     "db:migrate:supabase": "node database/migrate-from-supabase.mjs",
-    "storage:migrate:supabase": "node database/migrate-storage.mjs"
+    "storage:migrate:supabase": "node database/migrate-storage.mjs",
+    "deploy:dev": "bash deploy/update-development.sh"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
