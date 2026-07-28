@@ -22,6 +22,7 @@ const DEFAULT_BRAND = {
 let brand = {...DEFAULT_BRAND};
 const CLP = new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0});
 const UF = new Intl.NumberFormat('es-CL',{minimumFractionDigits:2,maximumFractionDigits:2});
+const USD = new Intl.NumberFormat('es-CL',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2});
 const today = new Date().toISOString().slice(0,10);
 const INITIAL_MODE = new URLSearchParams(window.location.search).get('modo') === 'presupuesto' ? 'presupuesto' : 'cotizacion';
 const AUTOSAVE_KEY = `th_current_autosave_${INITIAL_MODE}`;
@@ -250,15 +251,27 @@ async function loadBranding(){
 function money(v){
   return moneyFor(state, v);
 }
-function currentCurrency(doc=state){return doc?.moneda === 'UF' ? 'UF' : 'CLP'}
+function currentCurrency(doc=state){
+  const currency = String(doc?.moneda || 'CLP').toUpperCase();
+  return ['CLP','UF','USD'].includes(currency) ? currency : 'CLP';
+}
 function finiteNumber(value, fallback=0){const number=Number(value); return Number.isFinite(number) ? number : fallback}
 function validFolio(value){const number=Number(value); return Number.isSafeInteger(number) && number >= BASE_LAST_COTIZACION + 1 && number <= 9999999}
 function normalizedFolio(value){return validFolio(value) ? Number(value) : null}
 function moneyFor(doc, v){
   const n = finiteNumber(v);
-  return currentCurrency(doc) === 'UF' ? `UF ${UF.format(n)}` : CLP.format(Math.round(n)).replace(/^CLP\s?/, '').trim();
+  const currency = currentCurrency(doc);
+  if (currency === 'UF') return `UF ${UF.format(n)}`;
+  if (currency === 'USD') return USD.format(n);
+  return CLP.format(Math.round(n)).replace(/^CLP\s?/, '').trim();
 }
-function roundAmount(v, doc=state){const number=finiteNumber(v); return currentCurrency(doc) === 'UF' ? Math.round(number*100)/100 : Math.round(number)}
+function roundAmount(v, doc=state){const number=finiteNumber(v); return currentCurrency(doc) === 'CLP' ? Math.round(number) : Math.round(number*100)/100}
+function pricePlaceholder(doc=state, compact=false){
+  const currency = currentCurrency(doc);
+  if (currency === 'UF') return '25.00';
+  if (currency === 'USD') return compact ? '250.00' : '1250.00';
+  return compact ? '35000' : '1015267';
+}
 function blankItem(){return {codigo:'', descripcion:'', cantidad:1, um:'UN', precio:0, dscto:0}}
 function subtotalItem(it){return (Number(it.cantidad)||0)*(Number(it.precio)||0)*(1-(Number(it.dscto)||0)/100)}
 function specExample(i){return ['2.600 mm','6.000 mm','540 mm','24V / 220 AH','1.600 Kg','980 Kg','Incluido / Monofásico','Amarillo Industrial','1.150 mm','Doble','Hombre a Bordo','2500 Kg app','2.360 mm','PTP (*)','Magnético','Abierto','Poliuretano'][i] || ''}
@@ -441,6 +454,7 @@ function renderCotizacionSheet(t, docLabel, displayNumber){
             <div class="date-row"><b>Fecha Emisión:</b><div class="date-value">${esc(state.fecha)}</div></div>
             <div class="date-row"><b>Fecha Vcto:</b><div class="date-value">${esc(state.vcto||'-')}</div></div>
             <div class="date-row"><b>R.U.T.:</b><div class="date-value">${esc(state.rutEmpresa || brandRut())}</div></div>
+            <div class="date-row"><b>Moneda:</b><div class="date-value">${esc(currentCurrency(state))}</div></div>
           </div>
         </div>
       </header>
@@ -501,6 +515,7 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
             <div class="date-row"><b>Fecha Emisión:</b><div class="date-value">${formatDateDisplay(doc.fecha)}</div></div>
             <div class="date-row"><b>Fecha Vcto:</b><div class="date-value">${doc.vcto ? formatDateDisplay(doc.vcto) : '-'}</div></div>
             <div class="date-row"><b>R.U.T.:</b><div class="date-value">${esc(doc.rutEmpresa || brandRut())}</div></div>
+            <div class="date-row"><b>Moneda:</b><div class="date-value">${esc(currentCurrency(doc))}</div></div>
           </div>
         </section>
       </header>
@@ -1076,7 +1091,7 @@ function render(renderOptions={}){
           <span class="small">${isFinal ? (state.numeroReservado ? 'Número final bloqueado.' : 'El número final se asignará al guardar.') : 'El folio del presupuesto se asignará al guardar.'}</span>
         </div>
         <div class="field"><label>Fecha emisión</label><input type="date" value="${esc(state.fecha)}" oninput="setSilent('fecha',this.value)" onchange="render({preserveScroll:true})"></div>
-        <div class="field"><label>Moneda</label><select onchange="setSilent('moneda',this.value);render({preserveScroll:true})"><option value="CLP" ${currentCurrency(state)==='CLP'?'selected':''}>Pesos CLP ($)</option><option value="UF" ${currentCurrency(state)==='UF'?'selected':''}>UF</option></select></div>
+        <div class="field"><label>Moneda</label><select onchange="setSilent('moneda',this.value);render({preserveScroll:true})"><option value="CLP" ${currentCurrency(state)==='CLP'?'selected':''}>Pesos CLP ($)</option><option value="UF" ${currentCurrency(state)==='UF'?'selected':''}>UF</option><option value="USD" ${currentCurrency(state)==='USD'?'selected':''}>Dólares USD (US$)</option></select></div>
         ${isFinal ? `<div class="field"><label>Fecha vencimiento</label><input type="date" value="${esc(state.vcto)}" oninput="setSilent('vcto',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
       </div>
 
@@ -1115,7 +1130,7 @@ function render(renderOptions={}){
         <div class="cargo-row">
           <div class="field"><label>Detalle</label><input value="${esc(it.detalle)}" oninput="setCargoSilent(${i},'detalle',this.value)" onchange="render({preserveScroll:true})" placeholder="Cambio Blue Spot dañado Orden de trabajo 47387"></div>
           <div class="field"><label>Cantidad</label><input type="number" value="${esc(it.cantidad)}" oninput="setCargoSilent(${i},'cantidad',this.value)" onchange="render({preserveScroll:true})"></div>
-          <div class="field"><label>Valor unitario ${currentCurrency(state)}</label><input type="number" step="0.01" value="${esc(it.precio)}" oninput="setCargoSilent(${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${currentCurrency(state)==='UF'?'25.00':'35000'}"></div>
+          <div class="field"><label>Valor unitario ${currentCurrency(state)}</label><input type="number" step="0.01" value="${esc(it.precio)}" oninput="setCargoSilent(${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${pricePlaceholder(state,true)}"></div>
           <div class="field"><label>Total</label><input readonly value="${money(subtotalCargo(it))}"></div>
           <button class="danger" onclick="delCargo(${i})">Eliminar</button>
         </div>`).join('')}
@@ -1137,7 +1152,7 @@ function render(renderOptions={}){
                 <div class="field item-description-field"><label>Descripción</label><textarea class="item-description-input" placeholder="Arriendo mensual apilador eléctrico ETV 214" oninput="setRefItemSilent(${r},${i},'descripcion',this.value)" onchange="render({preserveScroll:true})">${esc(it.descripcion)}</textarea></div>
                 <div class="field"><label>Cantidad</label><input type="number" value="${esc(it.cantidad)}" oninput="setRefItemSilent(${r},${i},'cantidad',this.value)" onchange="render({preserveScroll:true})"></div>
                 ${isFinal ? `<div class="field"><label>U.M.</label><input value="${esc(it.um)}" oninput="setRefItemSilent(${r},${i},'um',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
-                <div class="field"><label>Precio ${currentCurrency(state)}</label><input type="number" step="0.01" value="${esc(it.precio)}" oninput="setRefItemSilent(${r},${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${currentCurrency(state)==='UF'?'25.00':'1015267'}"></div>
+                <div class="field"><label>Precio ${currentCurrency(state)}</label><input type="number" step="0.01" value="${esc(it.precio)}" oninput="setRefItemSilent(${r},${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${pricePlaceholder(state)}"></div>
                 ${isFinal ? `<div class="field"><label>Dscto %</label><input type="number" value="${esc(it.dscto)}" oninput="setRefItemSilent(${r},${i},'dscto',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
                 <div class="field"><label>Subtotal</label><input readonly value="${money(subtotalItem(it))}"></div>
                 <button class="danger" onclick="delRefItem(${r},${i})">Eliminar ítem</button>
