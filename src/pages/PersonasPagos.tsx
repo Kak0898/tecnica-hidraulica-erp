@@ -3,6 +3,7 @@ import { Banknote, Calculator, CheckCircle2, Clock3, Download, ExternalLink, Fil
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
+import { formatRut, isValidRut, rutStatus } from '../../shared/rut.js'
 
 const RETENCION_HONORARIOS_2026 = 15.25
 const TOPE_PREVISIONAL_UF_2026 = 90
@@ -322,6 +323,7 @@ export function PersonasPagos() {
   const sueldoCalculado = useMemo(() => calcSueldo(sueldoForm), [sueldoForm])
 
   const personasActivas = useMemo(() => personas.filter((persona) => persona.activo !== false), [personas])
+  const currentRutStatus = rutStatus(personaForm.rut)
 
   const horasExtraPeriodo = useMemo(() => horasExtra.filter((item) => (
     item.persona_id === sueldoForm.persona_id
@@ -584,33 +586,38 @@ export function PersonasPagos() {
       setMessage('Ingresa el nombre de la persona.')
       return
     }
-
-    setSaving(true)
-    setMessage('')
-
-    const { error } = await supabase.from('personas').insert({
-      tipo_relacion: personaForm.tipo_relacion,
-      rut: personaForm.rut.trim() || null,
-      nombre: personaForm.nombre.trim(),
-      email: personaForm.email.trim() || null,
-      telefono: personaForm.telefono.trim() || null,
-      cargo: personaForm.cargo.trim() || null,
-      centro_costo: personaForm.centro_costo.trim() || null,
-      banco: personaForm.banco.trim() || null,
-      tipo_cuenta: personaForm.tipo_cuenta.trim() || null,
-      numero_cuenta: personaForm.numero_cuenta.trim() || null,
-    })
-
-    setSaving(false)
-
-    if (error) {
-      setMessage(error.message)
+    if (personaForm.rut.trim() && !isValidRut(personaForm.rut)) {
+      setMessage('El RUT ingresado no es válido. Revisa el número y su dígito verificador.')
       return
     }
 
-    setPersonaForm(emptyPersona)
-    setMessage('Persona guardada.')
-    await load()
+    setSaving(true)
+    setMessage('')
+    try {
+      const { error } = await supabase.from('personas').insert({
+        tipo_relacion: personaForm.tipo_relacion,
+        rut: personaForm.rut.trim() ? formatRut(personaForm.rut) : null,
+        nombre: personaForm.nombre.trim(),
+        email: personaForm.email.trim() || null,
+        telefono: personaForm.telefono.trim() || null,
+        cargo: personaForm.cargo.trim() || null,
+        centro_costo: personaForm.centro_costo.trim() || null,
+        banco: personaForm.banco.trim() || null,
+        tipo_cuenta: personaForm.tipo_cuenta.trim() || null,
+        numero_cuenta: personaForm.numero_cuenta.trim() || null,
+      })
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+      setPersonaForm(emptyPersona)
+      setMessage('Persona guardada correctamente y disponible en todos los módulos de RR.HH.')
+      await load()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No fue posible guardar a la persona.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function removePersona(persona: Persona) {
@@ -974,7 +981,7 @@ export function PersonasPagos() {
               </select>
               <input className="rounded border border-slate-300 px-3 py-3" placeholder="Nombre" value={personaForm.nombre} onChange={(event) => setPersonaForm({ ...personaForm, nombre: event.target.value })} />
               <div className="grid gap-3 sm:grid-cols-2">
-                <input className="rounded border border-slate-300 px-3 py-3" placeholder="RUT" value={personaForm.rut} onChange={(event) => setPersonaForm({ ...personaForm, rut: event.target.value })} />
+                <label className="grid gap-1"><input className={`rounded border px-3 py-3 ${currentRutStatus === 'invalid' ? 'border-red-400' : currentRutStatus === 'valid' ? 'border-emerald-400' : 'border-slate-300'}`} placeholder="RUT" value={personaForm.rut} onChange={(event) => setPersonaForm({ ...personaForm, rut: formatRut(event.target.value) })} aria-invalid={currentRutStatus === 'invalid'} />{currentRutStatus === 'valid' && <span className="text-xs font-semibold text-emerald-700">RUT válido</span>}{currentRutStatus === 'invalid' && <span className="text-xs font-semibold text-red-700">Dígito verificador incorrecto</span>}</label>
                 <input className="rounded border border-slate-300 px-3 py-3" placeholder="Cargo" value={personaForm.cargo} onChange={(event) => setPersonaForm({ ...personaForm, cargo: event.target.value })} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

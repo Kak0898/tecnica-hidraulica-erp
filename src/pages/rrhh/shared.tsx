@@ -1,6 +1,7 @@
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { ReactNode } from 'react'
 import { Card } from '../../components/Card'
+import { dateValue } from '../../../shared/dates.js'
 
 export type PersonaRrhh = {
   id: string
@@ -53,6 +54,9 @@ export const labelClass = 'text-sm font-bold text-slate-700'
 
 export function databaseMessage(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return ''
+  if (error.code === 'INVALID_RUT') return 'El RUT ingresado no es válido. Revisa el número y su dígito verificador.'
+  if (error.code === 'REQUEST_TIMEOUT') return 'La operación tardó demasiado. Revisa la conexión y vuelve a intentarlo.'
+  if (error.code === 'NETWORK_ERROR') return 'No fue posible contactar la API. Revisa la conexión y vuelve a intentarlo.'
   if (error.code === '42P01' || error.code === 'PGRST205' || /rrhh_|column .* does not exist|schema cache/i.test(error.message || '')) {
     return 'Falta instalar el módulo de Recursos Humanos en PostgreSQL.'
   }
@@ -62,8 +66,9 @@ export function databaseMessage(error: { code?: string; message?: string } | nul
 }
 
 export function formatDate(value?: string | null) {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`))
+  const normalized = dateValue(value)
+  if (!normalized) return '—'
+  return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${normalized}T00:00:00Z`))
 }
 
 export function money(value?: number | null, currency = 'CLP') {
@@ -71,10 +76,11 @@ export function money(value?: number | null, currency = 'CLP') {
 }
 
 export function daysUntil(value?: string | null) {
-  if (!value) return null
+  const normalized = dateValue(value)
+  if (!normalized) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const target = new Date(`${value}T00:00:00`)
+  const target = new Date(`${normalized}T00:00:00`)
   return Math.ceil((target.getTime() - today.getTime()) / 86400000)
 }
 

@@ -5,6 +5,7 @@ import { useEmpresa } from './lib/empresa';
 import { Login } from './pages/Login';
 import { CambioClaveInicial } from './pages/CambioClaveInicial';
 import { usePermisos } from './lib/permisos';
+import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })))
 const Maquinaria = lazy(() => import('./pages/Maquinaria').then((module) => ({ default: module.Maquinaria })))
@@ -110,7 +111,7 @@ export default function App(){
   return <Layout page={page} setPage={setPage}><SinModulos /></Layout>
  }
 
- return <Layout page={page} setPage={setPage}><Suspense fallback={<CargandoModulo />}>
+ return <Layout page={page} setPage={setPage}><ModuleErrorBoundary key={page} section={page}><Suspense fallback={<CargandoModulo />}>
   {page==='dashboard' && <Dashboard/>}
   {page==='supabase' && <SupabaseSetup/>}
   {page==='clientes' && <Clientes/>}
@@ -135,5 +136,5 @@ export default function App(){
   {page==='auditorias' && <Auditorias/>}
   {page==='importar' && <Importar/>}
   {page==='usuarios-permisos' && <UsuariosPermisos/>}
- </Suspense></Layout>
+ </Suspense></ModuleErrorBoundary></Layout>
 }

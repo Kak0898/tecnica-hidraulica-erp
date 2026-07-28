@@ -1,5 +1,6 @@
 import { getActiveCompany, getCompanyAccess, withUserTransaction } from './db.mjs'
 import { hasAnyModule, RELATIONS, TABLE_ACCESS } from './policies.mjs'
+import { cleanRut, formatRut, isValidRut } from '../shared/rut.js'
 
 const columnCache = new Map()
 
@@ -218,6 +219,45 @@ function normalizeRows(payload, columns, userId, companyId, config) {
   })
 }
 
+function normalizePersonRut(row) {
+  if (!Object.prototype.hasOwnProperty.call(row, 'rut')) return
+  if (row.rut == null || String(row.rut).trim() === '') {
+    row.rut = null
+    return
+  }
+  if (!isValidRut(row.rut)) {
+    throw Object.assign(new Error('El RUT ingresado no es válido. Revisa el número y su dígito verificador.'), {
+      status: 400,
+      code: 'INVALID_RUT',
+    })
+  }
+  row.rut = formatRut(row.rut)
+}
+
+async function ensureUniquePersonRuts(client, rows, companyId, excludedId = null) {
+  const seen = new Set()
+  for (const row of rows) {
+    if (!row.rut) continue
+    const cleaned = cleanRut(row.rut)
+    if (seen.has(cleaned)) {
+      throw Object.assign(new Error('El RUT ya está registrado en la empresa activa.'), { status: 409, code: '23505' })
+    }
+    seen.add(cleaned)
+    const result = await client.query(
+      `select id
+         from public.personas
+        where empresa_id = $1
+          and regexp_replace(upper(coalesce(rut, '')), '[^0-9K]', '', 'g') = $2
+          and ($3::uuid is null or id <> $3::uuid)
+        limit 1`,
+      [companyId, cleaned, excludedId],
+    )
+    if (result.rowCount) {
+      throw Object.assign(new Error('El RUT ya está registrado en la empresa activa.'), { status: 409, code: '23505' })
+    }
+  }
+}
+
 async function executeSelect(client, userId, body, auth) {
   const columns = await getColumns(client, body.table)
   const parsed = parseSelect(body.select || '*')
@@ -258,6 +298,10 @@ async function executeSelect(client, userId, body, auth) {
 async function executeInsert(client, userId, body, auth) {
   const columns = await getColumns(client, body.table)
   const rows = normalizeRows(body.payload, columns, userId, auth.companyId, auth.config)
+  if (body.table === 'personas') {
+    rows.forEach(normalizePersonRut)
+    await ensureUniquePersonRuts(client, rows, auth.companyId)
+  }
   if (!rows.length) return { data: [], count: null }
   const insertColumns = [...new Set(rows.flatMap((row) => Object.keys(row)))]
   if (!insertColumns.length) throw new Error('No hay datos válidos para guardar.')
@@ -290,6 +334,11 @@ async function executeUpdateOrDelete(client, userId, body, auth) {
   let prefix
   if (body.action === 'update') {
     const row = normalizeRows(body.payload, columns, userId, auth.companyId, auth.config)[0]
+    if (body.table === 'personas') {
+      normalizePersonRut(row)
+      const excludedId = userFilters.find((filter) => filter.column === 'id' && filter.operator === 'eq')?.value || null
+      await ensureUniquePersonRuts(client, [row], auth.companyId, excludedId)
+    }
     delete row.id
     delete row.created_at
     const entries = Object.entries(row)

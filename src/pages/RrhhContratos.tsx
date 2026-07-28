@@ -4,6 +4,7 @@ import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
+import { dateValue } from '../../shared/dates.js'
 import { databaseMessage, daysUntil, EmptyState, formatDate, inputClass, labelClass, money, PersonaRrhh, RrhhHeader, SchemaWarning, StatusBadge } from './rrhh/shared'
 
 type Contract = {
@@ -116,7 +117,7 @@ export function RrhhContratos() {
 
   function editContract(item: Contract) {
     setEditingContract(item.id)
-    setContractForm({ persona_id: item.persona_id, numero: item.numero || '', tipo: item.tipo, estado: item.estado, fecha_inicio: item.fecha_inicio, fecha_termino: item.fecha_termino || '', fecha_firma: item.fecha_firma || '', cargo_nombre: item.cargo_nombre || '', centro_costo_nombre: item.centro_costo_nombre || '', jornada: item.jornada || '', horas_semanales: Number(item.horas_semanales || 0), sueldo_base: Number(item.sueldo_base || 0), moneda: item.moneda || 'CLP', funciones: item.funciones || '', documento_url: item.documento_url || '', alerta_dias: Number(item.alerta_dias || 45), notas: item.notas || '' })
+    setContractForm({ persona_id: item.persona_id, numero: item.numero || '', tipo: item.tipo, estado: item.estado, fecha_inicio: dateValue(item.fecha_inicio), fecha_termino: dateValue(item.fecha_termino), fecha_firma: dateValue(item.fecha_firma), cargo_nombre: item.cargo_nombre || '', centro_costo_nombre: item.centro_costo_nombre || '', jornada: item.jornada || '', horas_semanales: Number(item.horas_semanales || 0), sueldo_base: Number(item.sueldo_base || 0), moneda: item.moneda || 'CLP', funciones: item.funciones || '', documento_url: item.documento_url || '', alerta_dias: Number(item.alerta_dias || 45), notas: item.notas || '' })
     setShowContractForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -130,15 +131,20 @@ export function RrhhContratos() {
     if (['plazo_fijo', 'obra_faena'].includes(contractForm.tipo) && !contractForm.fecha_termino) return setMessage('Los contratos a plazo u obra deben tener fecha de término.')
 
     setSaving(true)
-    const payload = { empresa_id: activeEmpresaId, persona_id: contractForm.persona_id, numero: contractForm.numero.trim() || null, tipo: contractForm.tipo, estado: contractForm.estado, fecha_inicio: contractForm.fecha_inicio, fecha_termino: contractForm.fecha_termino || null, fecha_firma: contractForm.fecha_firma || null, cargo_nombre: contractForm.cargo_nombre.trim() || null, centro_costo_nombre: contractForm.centro_costo_nombre.trim() || null, jornada: contractForm.jornada.trim() || null, horas_semanales: Number(contractForm.horas_semanales || 0), sueldo_base: Number(contractForm.sueldo_base || 0), moneda: contractForm.moneda || 'CLP', funciones: contractForm.funciones.trim() || null, documento_url: contractForm.documento_url.trim() || null, alerta_dias: Number(contractForm.alerta_dias || 45), notas: contractForm.notas.trim() || null }
-    const result = editingContract
-      ? await supabase.from('rrhh_contratos').update(payload).eq('id', editingContract).eq('empresa_id', activeEmpresaId)
-      : await supabase.from('rrhh_contratos').insert(payload)
-    setSaving(false)
-    if (result.error) return setMessage(databaseMessage(result.error))
-    setMessage(editingContract ? 'Contrato actualizado correctamente.' : 'Contrato registrado correctamente.')
-    resetContract()
-    await load()
+    try {
+      const payload = { empresa_id: activeEmpresaId, persona_id: contractForm.persona_id, numero: contractForm.numero.trim() || null, tipo: contractForm.tipo, estado: contractForm.estado, fecha_inicio: contractForm.fecha_inicio, fecha_termino: contractForm.fecha_termino || null, fecha_firma: contractForm.fecha_firma || null, cargo_nombre: contractForm.cargo_nombre.trim() || null, centro_costo_nombre: contractForm.centro_costo_nombre.trim() || null, jornada: contractForm.jornada.trim() || null, horas_semanales: Number(contractForm.horas_semanales || 0), sueldo_base: Number(contractForm.sueldo_base || 0), moneda: contractForm.moneda || 'CLP', funciones: contractForm.funciones.trim() || null, documento_url: contractForm.documento_url.trim() || null, alerta_dias: Number(contractForm.alerta_dias || 45), notas: contractForm.notas.trim() || null }
+      const result = editingContract
+        ? await supabase.from('rrhh_contratos').update(payload).eq('id', editingContract).eq('empresa_id', activeEmpresaId)
+        : await supabase.from('rrhh_contratos').insert(payload)
+      if (result.error) return setMessage(databaseMessage(result.error))
+      setMessage(editingContract ? 'Contrato actualizado correctamente.' : 'Contrato registrado correctamente.')
+      resetContract()
+      await load()
+    } catch (error) {
+      setMessage(databaseMessage(error as { code?: string; message?: string }))
+    } finally {
+      setSaving(false)
+    }
   }
 
   function startAnnex(contract: Contract) {
@@ -154,12 +160,17 @@ export function RrhhContratos() {
     if (annexForm.titulo.trim().length < 3) return setMessage('Escribe un título que identifique el anexo.')
     if (!annexForm.fecha_vigencia) return setMessage('Indica desde cuándo rige el anexo.')
     setSaving(true)
-    const { error } = await supabase.from('rrhh_anexos').insert({ empresa_id: activeEmpresaId, persona_id: contract.persona_id, contrato_id: contract.id, tipo: annexForm.tipo, estado: annexForm.estado, fecha_emision: annexForm.fecha_emision, fecha_vigencia: annexForm.fecha_vigencia, titulo: annexForm.titulo.trim(), descripcion: annexForm.descripcion.trim() || null, documento_url: annexForm.documento_url.trim() || null, fecha_firma: annexForm.fecha_firma || null })
-    setSaving(false)
-    if (error) return setMessage(databaseMessage(error))
-    setMessage('Anexo registrado y asociado al contrato.')
-    setShowAnnexForm(false)
-    await load()
+    try {
+      const { error } = await supabase.from('rrhh_anexos').insert({ empresa_id: activeEmpresaId, persona_id: contract.persona_id, contrato_id: contract.id, tipo: annexForm.tipo, estado: annexForm.estado, fecha_emision: annexForm.fecha_emision, fecha_vigencia: annexForm.fecha_vigencia, titulo: annexForm.titulo.trim(), descripcion: annexForm.descripcion.trim() || null, documento_url: annexForm.documento_url.trim() || null, fecha_firma: annexForm.fecha_firma || null })
+      if (error) return setMessage(databaseMessage(error))
+      setMessage('Anexo registrado y asociado al contrato.')
+      setShowAnnexForm(false)
+      await load()
+    } catch (error) {
+      setMessage(databaseMessage(error as { code?: string; message?: string }))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function updateContractStatus(item: Contract, estado: string) {

@@ -1,7 +1,12 @@
 import 'dotenv/config'
 import pg from 'pg'
+import { configurePostgresTypes } from './postgres-types.mjs'
 
-const { Pool } = pg
+const { Pool, types } = pg
+
+// PostgreSQL DATE debe viajar como YYYY-MM-DD. Si se convierte a Date de
+// JavaScript, JSON lo transforma en timestamp y rompe inputs type="date".
+configurePostgresTypes(types)
 
 function sslConfig() {
   const value = String(process.env.DATABASE_SSL || '').toLowerCase()

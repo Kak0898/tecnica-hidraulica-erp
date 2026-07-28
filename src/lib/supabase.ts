@@ -39,8 +39,10 @@ async function apiRequest(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers || {})
   if (currentSession?.access_token) headers.set('Authorization', `Bearer ${currentSession.access_token}`)
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 20000)
   try {
-    const response = await fetch(`${API_URL}${path}`, { ...options, headers })
+    const response = await fetch(`${API_URL}${path}`, { ...options, headers, signal: options.signal || controller.signal })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
       if (response.status === 401 && currentSession) {
@@ -51,11 +53,18 @@ async function apiRequest(path: string, options: RequestInit = {}) {
     }
     return { data: payload, error: null, response }
   } catch (cause) {
+    const timedOut = cause instanceof DOMException && cause.name === 'AbortError'
     return {
       data: null,
-      error: { message: cause instanceof Error ? cause.message : 'No fue posible contactar la API.', code: 'NETWORK_ERROR', name: 'IntranetApiFetchError' },
+      error: {
+        message: timedOut ? 'La operación tardó demasiado. Revisa la conexión y vuelve a intentarlo.' : cause instanceof Error ? cause.message : 'No fue posible contactar la API.',
+        code: timedOut ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR',
+        name: 'IntranetApiFetchError',
+      },
       response: null,
     }
+  } finally {
+    window.clearTimeout(timeout)
   }
 }
 
