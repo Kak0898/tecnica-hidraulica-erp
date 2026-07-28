@@ -66,6 +66,27 @@ COMPANY_SLUG=tecnica-hidraulica
 
 No publiques `.env` ni uses la contraseña de PostgreSQL en variables `VITE_*`.
 
+## Sincronización de Google Ads
+
+Sin credenciales, el módulo funciona en modo manual y permite registrar métricas
+en PostgreSQL. Para habilitar el botón **Sincronizar Google Ads**, agrega al `.env`
+del servidor:
+
+```env
+GOOGLE_ADS_API_VERSION=v25
+GOOGLE_ADS_DEVELOPER_TOKEN=TOKEN_DEL_CENTRO_DE_API
+GOOGLE_ADS_CLIENT_ID=CLIENT_ID_OAUTH
+GOOGLE_ADS_CLIENT_SECRET=CLIENT_SECRET_OAUTH
+GOOGLE_ADS_REFRESH_TOKEN=REFRESH_TOKEN_OAUTH
+GOOGLE_ADS_CUSTOMER_ID=1234567890
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=
+```
+
+`GOOGLE_ADS_LOGIN_CUSTOMER_ID` solo es necesario cuando la autorización se hace
+desde una cuenta administradora. Los ID se escriben sin guiones. Después de
+guardar las variables, reinicia PM2 con `pm2 restart th-intranet --update-env`.
+Los secretos permanecen en el servidor y nunca se envían al navegador.
+
 ## Base de datos
 
 - `database/postgresql.sql`: SQL integral para PostgreSQL independiente.
@@ -122,6 +143,8 @@ recomendado es hacer cambios en tu Mac, ejecutar `npm run build`, subir con
 - Políticas RLS conservadas en PostgreSQL como segunda barrera.
 - Archivos de RR.HH. privados mediante enlaces temporales firmados.
 - Creación de usuarios administrada por propietarios y administradores.
+- Cambio administrativo de correo o contraseña con jerarquía protegida, cierre
+  de sesiones anteriores y cambio obligatorio de la clave temporal.
 
 ## Remuneraciones
 

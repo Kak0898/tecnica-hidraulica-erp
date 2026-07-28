@@ -11,8 +11,10 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { authenticate, createFileToken, createSession, publicUser, verifyFileToken } from './auth.mjs'
-import { databaseError, getCompanyAccess, pool, withUserTransaction } from './db.mjs'
-import { ALL_MODULES, RPC_ALLOWLIST, SET_RETURNING_RPCS } from './policies.mjs'
+import { canManageCredentials, validateCredentialChange } from './admin-users.mjs'
+import { databaseError, getActiveCompany, getCompanyAccess, pool, withUserTransaction } from './db.mjs'
+import { fetchGoogleAdsMetrics, googleAdsConfiguration, persistGoogleAdsRows } from './google-ads.mjs'
+import { ALL_MODULES, hasAnyModule, RPC_ALLOWLIST, SET_RETURNING_RPCS } from './policies.mjs'
 import { executeDataQuery } from './query.mjs'
 
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL en .env.')
@@ -105,6 +107,7 @@ app.patch('/api/auth/user', authenticate, async (req, res) => {
     if (!current.rowCount) return res.status(404).json({ error: 'Usuario no encontrado.' })
     const mergedMetadata = metadata ? { ...(current.rows[0].raw_user_meta_data || {}), ...metadata } : current.rows[0].raw_user_meta_data || {}
     const hash = password == null ? null : await bcrypt.hash(password, 12)
+    if (hash) mergedMetadata.erp_auth_version = Number(mergedMetadata.erp_auth_version || 0) + 1
     const result = await pool.query(
       `update auth.users
           set encrypted_password = coalesce($2, encrypted_password),
@@ -250,6 +253,101 @@ app.post('/api/functions/crear-usuario-empresa', authenticate, async (req, res) 
       ? { status: error.status, code: 'USER_CREATE_ERROR', message: error.message }
       : databaseError(error)
     res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/actualizar-credenciales-usuario', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const targetUserId = String(req.body?.user_id || '')
+  const email = String(req.body?.email || '').trim().toLowerCase()
+  const password = String(req.body?.password || '')
+  if (!companyId || !targetUserId) return res.status(400).json({ error: 'Empresa y usuario son obligatorios.' })
+
+  try {
+    const callerAccess = await getCompanyAccess(req.user.id, companyId)
+    if (!callerAccess?.isAdmin) return res.status(403).json({ error: 'Solo un administrador puede cambiar credenciales.' })
+    const targetResult = await pool.query(
+      `select u.id, u.email, u.encrypted_password, u.raw_user_meta_data, ue.rol
+         from auth.users u
+         join public.usuarios_empresas ue on ue.user_id = u.id
+        where u.id = $1 and ue.empresa_id = $2
+        limit 1`,
+      [targetUserId, companyId],
+    )
+    if (!targetResult.rowCount) return res.status(404).json({ error: 'El usuario no pertenece a la empresa activa.' })
+    const target = targetResult.rows[0]
+    if (!canManageCredentials(callerAccess.role, target.rol, target.id === req.user.id)) {
+      return res.status(403).json({ error: 'No puedes cambiar las credenciales de ese usuario. El propietario protege las cuentas administrativas.' })
+    }
+    const validation = validateCredentialChange({ email, password, currentEmail: target.email })
+    if (validation) return res.status(400).json({ error: validation })
+
+    const passwordHash = password ? await bcrypt.hash(password, 12) : null
+    const metadata = {
+      ...(target.raw_user_meta_data || {}),
+      erp_auth_version: Number(target.raw_user_meta_data?.erp_auth_version || 0) + 1,
+      ...(password ? { erp_requiere_cambio_clave: true } : {}),
+    }
+    const updated = await pool.query(
+      `update auth.users
+          set email = $2,
+              encrypted_password = coalesce($3, encrypted_password),
+              raw_user_meta_data = $4::jsonb,
+              updated_at = now()
+        where id = $1
+        returning id, email`,
+      [target.id, email, passwordHash, JSON.stringify(metadata)],
+    )
+    console.info('[usuarios] credenciales actualizadas', { actor: req.user.id, target: target.id, companyId, emailChanged: email !== target.email, passwordChanged: Boolean(password) })
+    res.json({ data: { user_id: updated.rows[0].id, email: updated.rows[0].email, password_changed: Boolean(password) } })
+  } catch (error) {
+    const formatted = databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/estado-google-ads', authenticate, async (req, res) => {
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = await getCompanyAccess(req.user.id, companyId)
+    if (!companyId || !hasAnyModule(access, ['google_ads'])) return res.status(403).json({ error: 'No tienes acceso a Google Ads.' })
+    const config = googleAdsConfiguration()
+    const latest = await withUserTransaction(req.user.id, async (client) => (await client.query(
+      `select max(fecha) filter (where fuente = 'api') as ultima_fecha_api,
+              max(updated_at) filter (where fuente = 'api') as ultima_sincronizacion
+         from public.google_ads_metricas_diarias
+        where empresa_id = $1`,
+      [companyId],
+    )).rows[0])
+    res.json({ data: {
+      configured: config.configured,
+      missing: config.missing,
+      api_version: config.apiVersion,
+      customer_suffix: config.customerId ? config.customerId.slice(-4) : '',
+      ultima_fecha_api: latest?.ultima_fecha_api || null,
+      ultima_sincronizacion: latest?.ultima_sincronizacion || null,
+    } })
+  } catch (error) {
+    const formatted = databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/sincronizar-google-ads', authenticate, async (req, res) => {
+  const endDate = String(req.body?.fecha_fin || new Date().toISOString().slice(0, 10))
+  const defaultStart = new Date(`${endDate}T00:00:00Z`)
+  defaultStart.setUTCDate(defaultStart.getUTCDate() - 29)
+  const startDate = String(req.body?.fecha_inicio || defaultStart.toISOString().slice(0, 10))
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = await getCompanyAccess(req.user.id, companyId)
+    if (!companyId || !hasAnyModule(access, ['google_ads'])) return res.status(403).json({ error: 'No tienes acceso a Google Ads.' })
+    const rows = await fetchGoogleAdsMetrics({ startDate, endDate })
+    const result = await withUserTransaction(req.user.id, (client) => persistGoogleAdsRows(client, { companyId, userId: req.user.id, rows }))
+    res.json({ data: { ...result, start_date: startDate, end_date: endDate } })
+  } catch (error) {
+    const status = error.status || 502
+    res.status(status).json({ error: error.message || 'No fue posible sincronizar Google Ads.', code: error.code || 'GOOGLE_ADS_SYNC_ERROR' })
   }
 })
 

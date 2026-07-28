@@ -71,7 +71,7 @@ function roleLabel(role: string) {
 }
 
 export function UsuariosPermisos() {
-  const { activeEmpresaId, activeEmpresa, userEmail } = useEmpresa()
+  const { activeEmpresaId, activeEmpresa, empresas, userEmail } = useEmpresa()
   const { isAdmin, schemaReady, refreshPermissions } = usePermisos()
   const [users, setUsers] = useState<UserAccess[]>([])
   const [people, setPeople] = useState<PersonOption[]>([])
@@ -85,6 +85,12 @@ export function UsuariosPermisos() {
   const [linkedPersonId, setLinkedPersonId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [credentialUser, setCredentialUser] = useState<UserAccess | null>(null)
+  const [credentialEmail, setCredentialEmail] = useState('')
+  const [credentialPassword, setCredentialPassword] = useState('')
+  const [credentialConfirmation, setCredentialConfirmation] = useState('')
+  const [showCredentialPassword, setShowCredentialPassword] = useState(false)
+  const [credentialSaving, setCredentialSaving] = useState(false)
   const [message, setMessage] = useState('')
 
   async function loadUsers() {
@@ -124,6 +130,7 @@ export function UsuariosPermisos() {
     active: users.filter((user) => user.activo).length,
     admins: users.filter((user) => ['owner', 'admin'].includes(user.rol)).length,
   }), [users])
+  const currentRole = empresas.find((item) => item.empresas?.id === activeEmpresaId)?.rol || ''
 
   function resetForm() {
     setFullName('')
@@ -144,6 +151,62 @@ export function UsuariosPermisos() {
     setSelected(new Set(user.modulos))
     setLinkedPersonId(user.persona_id || '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function openCredentials(user: UserAccess) {
+    setCredentialUser(user)
+    setCredentialEmail(user.email)
+    setCredentialPassword('')
+    setCredentialConfirmation('')
+    setShowCredentialPassword(false)
+    window.setTimeout(() => document.getElementById('credenciales-usuario')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }
+
+  function closeCredentials() {
+    setCredentialUser(null)
+    setCredentialEmail('')
+    setCredentialPassword('')
+    setCredentialConfirmation('')
+    setShowCredentialPassword(false)
+  }
+
+  function canChangeCredentials(user: UserAccess) {
+    if (user.email.toLowerCase() === userEmail.toLowerCase() || user.rol === 'owner') return false
+    if (currentRole === 'owner') return ['admin', 'operador'].includes(user.rol)
+    return currentRole === 'admin' && user.rol === 'operador'
+  }
+
+  async function saveCredentials() {
+    if (!credentialUser || !activeEmpresaId) return
+    const nextEmail = credentialEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) return setMessage('Ingresa un correo válido para iniciar sesión.')
+    if (credentialPassword && credentialPassword.length < 8) return setMessage('La contraseña temporal debe tener al menos 8 caracteres.')
+    if (credentialPassword !== credentialConfirmation) return setMessage('Las contraseñas no coinciden.')
+    if (nextEmail === credentialUser.email.toLowerCase() && !credentialPassword) return setMessage('Cambia el correo o ingresa una nueva contraseña temporal.')
+
+    setCredentialSaving(true)
+    setMessage('')
+    try {
+      const { error } = await supabase.functions.invoke('actualizar-credenciales-usuario', {
+        body: {
+          empresa_id: activeEmpresaId,
+          user_id: credentialUser.user_id,
+          email: nextEmail,
+          password: credentialPassword,
+        },
+      })
+      if (error) return setMessage(await functionErrorMessage(error))
+      const changedPassword = Boolean(credentialPassword)
+      closeCredentials()
+      await loadUsers()
+      setMessage(changedPassword
+        ? 'Usuario y contraseña temporal actualizados. Las sesiones anteriores se cerraron y deberá crear una clave personal al ingresar.'
+        : 'Usuario de acceso actualizado. Las sesiones anteriores se cerraron y ya puede ingresar con el nuevo correo.')
+    } catch (error) {
+      setMessage(await functionErrorMessage(error))
+    } finally {
+      setCredentialSaving(false)
+    }
   }
 
   function toggleModule(module: ModuleKey) {
@@ -304,10 +367,24 @@ export function UsuariosPermisos() {
         <div className="mt-6 flex flex-wrap gap-2"><button onClick={saveAccess} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><Save size={17} />{saving ? 'Guardando...' : editingUser ? 'Actualizar usuario' : 'Crear usuario y guardar'}</button>{editingUser && <button onClick={resetForm} className="inline-flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-3 font-bold text-slate-700"><X size={17} />Cancelar</button>}</div>
       </Card>
 
+      {credentialUser && <div id="credenciales-usuario"><Card className="border-blue-200 bg-blue-50/40">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="rounded-xl bg-blue-100 p-3 text-blue-700"><KeyRound size={21} /></div>
+          <div><h3 className="font-bold text-slate-950">Cambiar usuario o contraseña</h3><p className="mt-1 text-sm text-slate-600">Cuenta de {credentialUser.nombre_completo}. Puedes cambiar el correo de acceso, la contraseña temporal o ambos.</p></div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <label className="text-sm font-bold text-slate-700">Correo para iniciar sesión<input type="email" value={credentialEmail} onChange={(event) => setCredentialEmail(event.target.value)} autoComplete="off" className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950" /></label>
+          <label className="text-sm font-bold text-slate-700">Nueva contraseña temporal <span className="font-normal text-slate-500">(opcional)</span><div className="relative mt-2"><input type={showCredentialPassword ? 'text' : 'password'} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" placeholder="Mínimo 8 caracteres" className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-3 pr-12 font-normal text-slate-950" /><button type="button" onClick={() => setShowCredentialPassword((value) => !value)} aria-label={showCredentialPassword ? 'Ocultar nueva contraseña' : 'Mostrar nueva contraseña'} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">{showCredentialPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+          <label className="text-sm font-bold text-slate-700">Confirmar contraseña<input type={showCredentialPassword ? 'text' : 'password'} value={credentialConfirmation} onChange={(event) => setCredentialConfirmation(event.target.value)} autoComplete="new-password" placeholder="Repite la contraseña" className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950" /></label>
+        </div>
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">Al guardar, se cerrarán las sesiones anteriores. Si asignas una contraseña temporal, el usuario deberá reemplazarla en su siguiente ingreso.</div>
+        <div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={saveCredentials} disabled={credentialSaving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><KeyRound size={17} />{credentialSaving ? 'Actualizando...' : 'Guardar credenciales'}</button><button type="button" onClick={closeCredentials} disabled={credentialSaving} className="rounded-xl bg-slate-200 px-5 py-3 font-bold text-slate-700 disabled:opacity-50">Cancelar</button></div>
+      </Card></div>}
+
       <Card>
         <div className="mb-4 flex items-center gap-2"><UsersRound size={20} className="text-blue-700" /><h3 className="font-bold text-slate-950">Usuarios de la empresa</h3></div>
         <div className="overflow-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Persona</th><th className="p-3">Rol</th><th className="p-3">Secciones</th><th className="p-3">Estado</th><th className="p-3">Acciones</th></tr></thead><tbody>
-          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3"><div className="font-bold text-slate-900">{user.nombre_completo}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</div><div className="mt-1 text-xs text-slate-500">{user.email}</div>{user.persona_nombre && <div className="mt-1 text-xs font-semibold text-emerald-700">Ficha: {user.persona_nombre}</div>}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar usuario y permisos" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
+          {users.map((user) => <tr key={user.user_id} className="border-b"><td className="p-3"><div className="font-bold text-slate-900">{user.nombre_completo}{user.email.toLowerCase() === userEmail.toLowerCase() && <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-black uppercase text-blue-700">Tú</span>}</div><div className="mt-1 text-xs text-slate-500">{user.email}</div>{user.persona_nombre && <div className="mt-1 text-xs font-semibold text-emerald-700">Ficha: {user.persona_nombre}</div>}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${['owner', 'admin'].includes(user.rol) ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'}`}>{roleLabel(user.rol)}</span></td><td className="p-3">{['owner', 'admin'].includes(user.rol) ? 'Todas' : `${user.modulos.length} habilitadas`}</td><td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{user.activo ? 'Activo' : 'Desactivado'}</span></td><td className="p-3"><div className="flex gap-2"><button onClick={() => editUser(user)} title="Editar usuario y permisos" aria-label={`Editar permisos de ${user.nombre_completo}`} className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button><button onClick={() => openCredentials(user)} disabled={!canChangeCredentials(user)} title={canChangeCredentials(user) ? 'Cambiar usuario o contraseña' : 'Credenciales protegidas'} aria-label={`Cambiar credenciales de ${user.nombre_completo}`} className="rounded-lg bg-blue-100 p-2 text-blue-700 disabled:cursor-not-allowed disabled:opacity-30"><KeyRound size={16} /></button><button onClick={() => toggleUserStatus(user)} disabled={user.rol === 'owner' || user.email.toLowerCase() === userEmail.toLowerCase()} title={user.activo ? 'Desactivar usuario' : 'Activar usuario'} aria-label={`${user.activo ? 'Desactivar' : 'Activar'} a ${user.nombre_completo}`} className={`rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-30 ${user.activo ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{user.activo ? <PowerOff size={16} /> : <Power size={16} />}</button></div></td></tr>)}
           {!loading && !users.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay usuarios disponibles o todavía falta configurar el módulo.</td></tr>}
         </tbody></table></div>
       </Card>

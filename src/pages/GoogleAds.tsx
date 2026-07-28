@@ -29,6 +29,7 @@ type Metrica = {
   valor_conversiones: number
   cuota_impresiones: number
   perdida_presupuesto: number
+  fuente?: 'manual' | 'api' | 'importacion'
   google_ads_campanas?: Campana | null
 }
 
@@ -41,6 +42,15 @@ type Recomendacion = {
   detalle: string
   estado: 'pendiente' | 'aplicada' | 'descartada'
   google_ads_campanas?: { nombre: string } | null
+}
+
+type GoogleAdsStatus = {
+  configured: boolean
+  missing: string[]
+  api_version: string
+  customer_suffix: string
+  ultima_fecha_api?: string | null
+  ultima_sincronizacion?: string | null
 }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -89,6 +99,13 @@ function priorityClass(priority: string) {
   return 'border-blue-200 bg-blue-50 text-blue-800'
 }
 
+function dateTime(value?: string | null) {
+  if (!value) return 'nunca'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return 'nunca'
+  return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short' }).format(parsed)
+}
+
 export function GoogleAds() {
   const { activeEmpresaId } = useEmpresa()
   const [campaigns, setCampaigns] = useState<Campana[]>([])
@@ -99,35 +116,41 @@ export function GoogleAds() {
   const [showSetup, setShowSetup] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<GoogleAdsStatus | null>(null)
   const [message, setMessage] = useState('')
 
-  async function load() {
+  async function load(showConfirmation = false) {
     setLoading(true)
-    setMessage('')
+    try {
+      const [campaignResult, metricResult, recommendationResult, statusResult] = await Promise.all([
+        supabase.from('google_ads_campanas').select('*').order('nombre'),
+        supabase
+          .from('google_ads_metricas_diarias')
+          .select('*, google_ads_campanas(id, nombre, google_campaign_id, tipo, estado, presupuesto_diario, objetivo_cpa, objetivo_roas, url_google_ads)')
+          .order('fecha', { ascending: false })
+          .limit(180),
+        supabase
+          .from('google_ads_recomendaciones')
+          .select('*, google_ads_campanas(nombre)')
+          .eq('estado', 'pendiente')
+          .order('fecha', { ascending: false })
+          .limit(30),
+        supabase.functions.invoke('estado-google-ads'),
+      ])
 
-    const [campaignResult, metricResult, recommendationResult] = await Promise.all([
-      supabase.from('google_ads_campanas').select('*').order('nombre'),
-      supabase
-        .from('google_ads_metricas_diarias')
-        .select('*, google_ads_campanas(id, nombre, google_campaign_id, tipo, estado, presupuesto_diario, objetivo_cpa, objetivo_roas, url_google_ads)')
-        .order('fecha', { ascending: false })
-        .limit(180),
-      supabase
-        .from('google_ads_recomendaciones')
-        .select('*, google_ads_campanas(nombre)')
-        .eq('estado', 'pendiente')
-        .order('fecha', { ascending: false })
-        .limit(30),
-    ])
-
-    if (campaignResult.error) {
-      setMessage('Falta instalar el módulo Google Ads en la base de datos. Ejecuta el SQL completo entregado con el sistema.')
+      const dataError = campaignResult.error || metricResult.error || recommendationResult.error
+      if (dataError) setMessage(`No se pudieron cargar los datos de Google Ads: ${dataError.message}`)
+      else if (showConfirmation) setMessage('Datos recargados desde PostgreSQL. Para consultar datos nuevos de Google utiliza “Sincronizar Google Ads”.')
+      setCampaigns((campaignResult.data || []) as Campana[])
+      setMetrics((metricResult.data || []) as Metrica[])
+      setRecommendations((recommendationResult.data || []) as Recomendacion[])
+      if (!statusResult.error) setSyncStatus(statusResult.data as GoogleAdsStatus)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No fue posible actualizar la sección Google Ads.')
+    } finally {
+      setLoading(false)
     }
-
-    setCampaigns((campaignResult.data || []) as Campana[])
-    setMetrics((metricResult.data || []) as Metrica[])
-    setRecommendations((recommendationResult.data || []) as Recomendacion[])
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -195,6 +218,26 @@ export function GoogleAds() {
     return suggestions.slice(0, 6)
   }, [latestMetrics])
 
+  async function syncGoogleAds() {
+    if (!syncStatus?.configured) {
+      const missing = syncStatus?.missing?.join(', ') || 'credenciales de Google Ads'
+      setMessage(`La sincronización automática aún no está configurada en el servidor. Faltan: ${missing}.`)
+      return
+    }
+    setSyncing(true)
+    setMessage('')
+    try {
+      const { data, error } = await supabase.functions.invoke('sincronizar-google-ads', { body: {} })
+      if (error) return setMessage(error.message)
+      await load(false)
+      setMessage(`Google Ads sincronizado: ${Number(data?.campaigns || 0)} campañas y ${Number(data?.metrics || 0)} métricas actualizadas.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No fue posible sincronizar Google Ads.')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   async function saveCampaign() {
     if (!campaignForm.nombre.trim()) {
       setMessage('Ingresa el nombre de la campaña.')
@@ -202,26 +245,26 @@ export function GoogleAds() {
     }
 
     setSaving(true)
-    const { error } = await supabase.from('google_ads_campanas').insert({
-      nombre: campaignForm.nombre.trim(),
-      google_campaign_id: campaignForm.google_campaign_id.trim() || null,
-      tipo: campaignForm.tipo,
-      estado: campaignForm.estado,
-      presupuesto_diario: Number(campaignForm.presupuesto_diario || 0),
-      objetivo_cpa: Number(campaignForm.objetivo_cpa || 0),
-      objetivo_roas: Number(campaignForm.objetivo_roas || 0),
-      url_google_ads: campaignForm.url_google_ads.trim() || null,
-    })
-    setSaving(false)
-
-    if (error) {
-      setMessage(error.message)
-      return
+    try {
+      const { error } = await supabase.from('google_ads_campanas').insert({
+        nombre: campaignForm.nombre.trim(),
+        google_campaign_id: campaignForm.google_campaign_id.trim() || null,
+        tipo: campaignForm.tipo,
+        estado: campaignForm.estado,
+        presupuesto_diario: Number(campaignForm.presupuesto_diario || 0),
+        objetivo_cpa: Number(campaignForm.objetivo_cpa || 0),
+        objetivo_roas: Number(campaignForm.objetivo_roas || 0),
+        url_google_ads: campaignForm.url_google_ads.trim() || null,
+      })
+      if (error) return setMessage(error.message)
+      setCampaignForm(emptyCampaign)
+      await load(false)
+      setMessage('Campaña agregada.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No fue posible guardar la campaña.')
+    } finally {
+      setSaving(false)
     }
-
-    setCampaignForm(emptyCampaign)
-    setMessage('Campaña agregada.')
-    await load()
   }
 
   async function saveMetric() {
@@ -231,29 +274,29 @@ export function GoogleAds() {
     }
 
     setSaving(true)
-    const { error } = await supabase.from('google_ads_metricas_diarias').upsert({
-      campana_id: metricForm.campana_id,
-      fecha: metricForm.fecha,
-      impresiones: Number(metricForm.impresiones || 0),
-      clics: Number(metricForm.clics || 0),
-      costo: Number(metricForm.costo || 0),
-      conversiones: Number(metricForm.conversiones || 0),
-      valor_conversiones: Number(metricForm.valor_conversiones || 0),
-      cuota_impresiones: Number(metricForm.cuota_impresiones || 0),
-      perdida_presupuesto: Number(metricForm.perdida_presupuesto || 0),
-    }, { onConflict: 'campana_id,fecha' })
-
-    if (!error) await supabase.rpc('generar_recomendaciones_google_ads', { p_fecha: metricForm.fecha })
-    setSaving(false)
-
-    if (error) {
-      setMessage(error.message)
-      return
+    try {
+      const { error } = await supabase.from('google_ads_metricas_diarias').upsert({
+        campana_id: metricForm.campana_id,
+        fecha: metricForm.fecha,
+        impresiones: Number(metricForm.impresiones || 0),
+        clics: Number(metricForm.clics || 0),
+        costo: Number(metricForm.costo || 0),
+        conversiones: Number(metricForm.conversiones || 0),
+        valor_conversiones: Number(metricForm.valor_conversiones || 0),
+        cuota_impresiones: Number(metricForm.cuota_impresiones || 0),
+        perdida_presupuesto: Number(metricForm.perdida_presupuesto || 0),
+      }, { onConflict: 'campana_id,fecha' })
+      if (error) return setMessage(error.message)
+      const recommendationResult = await supabase.rpc('generar_recomendaciones_google_ads', { p_fecha: metricForm.fecha })
+      if (recommendationResult.error) return setMessage(`Las métricas se guardaron, pero las recomendaciones fallaron: ${recommendationResult.error.message}`)
+      setMetricForm((current) => ({ ...emptyMetric, campana_id: current.campana_id, fecha: current.fecha }))
+      await load(false)
+      setMessage('Métricas guardadas y recomendaciones actualizadas.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No fue posible guardar las métricas.')
+    } finally {
+      setSaving(false)
     }
-
-    setMetricForm((current) => ({ ...emptyMetric, campana_id: current.campana_id, fecha: current.fecha }))
-    setMessage('Métricas guardadas y recomendaciones actualizadas.')
-    await load()
   }
 
   async function resolveRecommendation(id: string, status: 'aplicada' | 'descartada') {
@@ -275,12 +318,20 @@ export function GoogleAds() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setShowSetup((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><Settings2 size={18} /> Configurar</button>
-          <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={18} /> {loading ? 'Actualizando...' : 'Actualizar'}</button>
+          <button onClick={() => load(true)} disabled={loading || syncing} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /> {loading ? 'Recargando...' : 'Recargar base'}</button>
+          <button onClick={syncGoogleAds} disabled={syncing || loading} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-700/20 hover:bg-emerald-800 disabled:opacity-50"><RefreshCw size={18} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando...' : 'Sincronizar Google Ads'}</button>
           <a href="https://ads.google.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800"><ExternalLink size={18} /> Abrir Google Ads</a>
         </div>
       </div>
 
       <FeedbackToast message={message} onClose={() => setMessage('')} />
+
+      <div className={`mb-5 rounded-2xl border p-4 ${syncStatus?.configured ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+        <div className="flex items-start gap-3">
+          {syncStatus?.configured ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-700" size={20} /> : <AlertTriangle className="mt-0.5 shrink-0 text-amber-700" size={20} />}
+          <div><p className="font-black">{syncStatus?.configured ? 'Google Ads conectado' : 'Google Ads en modo manual'}</p><p className="mt-1 text-sm leading-6">{syncStatus?.configured ? `Cuenta terminada en ${syncStatus.customer_suffix}. Última sincronización: ${dateTime(syncStatus.ultima_sincronizacion)}. El botón verde consulta Google y actualiza PostgreSQL.` : '“Recargar base” solo muestra lo que ya está guardado. Para recibir datos nuevos automáticamente debes configurar las credenciales de Google Ads en el servidor.'}</p>{!syncStatus?.configured && syncStatus?.missing?.length ? <p className="mt-1 text-xs font-semibold">Configuración pendiente: {syncStatus.missing.join(', ')}</p> : null}</div>
+        </div>
+      </div>
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard title="Inversión" value={money(summary.cost)} detail={latestDate || 'Sin fecha'} icon={<BarChart3 />} />
