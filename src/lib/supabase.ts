@@ -193,6 +193,36 @@ const auth = {
   },
 }
 
+const comprobantes = {
+  async list() {
+    const result = await apiRequest('/comprobantes')
+    return { data: result.data?.data || null, error: result.error }
+  },
+  async upload(form: FormData) {
+    const result = await apiRequest('/comprobantes', { method: 'POST', body: form })
+    return { data: result.data?.data || null, error: result.error }
+  },
+  async remove(quoteId: string | number, receiptId: string) {
+    const result = await apiRequest(`/comprobantes/${encodeURIComponent(quoteId)}/${encodeURIComponent(receiptId)}`, { method: 'DELETE' })
+    return { data: result.data?.data || null, error: result.error }
+  },
+  async updateRules(payload: Record<string, any>) {
+    const result = await apiRequest('/comprobantes/reglas', { method: 'PATCH', body: JSON.stringify(payload) })
+    return { data: result.data?.data || null, error: result.error }
+  },
+  async recalculate(sellerId: string, month: string) {
+    const result = await apiRequest('/comprobantes/recalcular', { method: 'POST', body: JSON.stringify({ vendedor_id: sellerId, month }) })
+    return { data: result.data?.data || null, error: result.error }
+  },
+}
+
+const cotizaciones = {
+  async importRows(rows: Record<string, any>[], fileName: string) {
+    const result = await apiRequest('/cotizaciones/import', { method: 'POST', body: JSON.stringify({ rows, file_name: fileName }) })
+    return { data: result.data?.data || null, error: result.error }
+  },
+}
+
 function storageBucket(bucket: string) {
   return {
     async upload(path: string, file: File, options: { upsert?: boolean } = {}) {
@@ -229,5 +259,7 @@ export const supabase: any = {
       return { data: result.data?.data ?? null, error: result.error }
     },
   },
+  comprobantes,
+  cotizaciones,
   storage: { from: storageBucket },
 }

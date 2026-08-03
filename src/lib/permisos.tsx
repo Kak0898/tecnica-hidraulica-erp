@@ -17,6 +17,7 @@ export const MODULE_GROUPS = [
       { key: 'empresas_asociadas', label: 'Empresas asociadas' },
       { key: 'presupuestos', label: 'Presupuestos' },
       { key: 'cotizaciones', label: 'Cotizaciones' },
+      { key: 'comprobantes_comisiones', label: 'Comprobantes y comisiones' },
       { key: 'publicaciones', label: 'Publicaciones' },
       { key: 'ordenes', label: 'Órdenes de trabajo' },
       { key: 'crm', label: 'CRM' },
@@ -67,6 +68,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
   'empresas-asociadas': 'empresas_asociadas',
   presupuestos: 'presupuestos',
   cotizaciones: 'cotizaciones',
+  'comprobantes-comisiones': 'comprobantes_comisiones',
   'publicaciones-productos': 'publicaciones',
   ordenes: 'ordenes',
   crm: 'crm',
@@ -89,7 +91,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
 
 const PAGE_ORDER = [
   'dashboard', 'google-ads', 'clientes', 'empresas-asociadas', 'presupuestos',
-  'cotizaciones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
+  'cotizaciones', 'comprobantes-comisiones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
   'rrhh-personas', 'rrhh-contratos', 'rrhh-ausencias', 'rrhh-documentos',
   'personas-pagos', 'flota-vehiculos', 'maquinaria', 'repuestos', 'epp-ropa',
   'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',

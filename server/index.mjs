@@ -14,8 +14,11 @@ import { authenticate, createFileToken, createSession, publicUser, verifyFileTok
 import { canManageCredentials, validateCredentialChange } from './admin-users.mjs'
 import { databaseError, getActiveCompany, getCompanyAccess, pool, withUserTransaction } from './db.mjs'
 import { fetchGoogleAdsMetrics, googleAdsConfiguration, persistGoogleAdsRows } from './google-ads.mjs'
+import { calculateCommission, commercialRules, quoteNetAmount, receiptFilename, validateCommercialRules } from './commissions.mjs'
 import { ALL_MODULES, hasAnyModule, RPC_ALLOWLIST, SET_RETURNING_RPCS } from './policies.mjs'
 import { executeDataQuery } from './query.mjs'
+import { formatRut, isValidRut } from '../shared/rut.js'
+import { normalizeQuoteImportRow } from '../shared/quote-import.js'
 
 if (!process.env.DATABASE_URL) throw new Error('Falta DATABASE_URL en .env.')
 if (String(process.env.JWT_SECRET || '').length < 32) throw new Error('JWT_SECRET debe tener al menos 32 caracteres.')
@@ -24,6 +27,11 @@ const app = express()
 const port = Number(process.env.PORT || 3001)
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const uploadRoot = path.resolve(rootDir, process.env.UPLOAD_DIR || 'uploads')
+const transferReceiptBucket = 'comprobantes-transferencia'
+const documentRoot = path.resolve(process.env.DOCUMENT_ROOT || process.env.TRANSFER_RECEIPT_DIR || path.resolve(rootDir, '..', 'doc'))
+const transferReceiptRoot = path.resolve(documentRoot, 'cotizaciones')
+const employeeDocumentRoot = path.resolve(documentRoot, 'empleado')
+const displayStoragePath = (value) => String(value).replace(/^\/private\/var(?=\/)/, '/var')
 const maxUploadBytes = Math.max(1, Number(process.env.MAX_UPLOAD_MB || 15)) * 1024 * 1024
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxUploadBytes, files: 1 } })
 const loginLimiter = rateLimit({
@@ -352,13 +360,18 @@ app.post('/api/functions/sincronizar-google-ads', authenticate, async (req, res)
 })
 
 function safeStoragePath(bucket, objectPath) {
-  if (!['empresa-assets', 'rrhh-documentos'].includes(bucket)) throw Object.assign(new Error('Contenedor de archivos no permitido.'), { status: 400 })
+  if (!['empresa-assets', 'rrhh-documentos', transferReceiptBucket].includes(bucket)) throw Object.assign(new Error('Contenedor de archivos no permitido.'), { status: 400 })
   const normalized = String(objectPath || '').replaceAll('\\', '/').replace(/^\/+/, '')
   if (!normalized || normalized.split('/').some((part) => !part || part === '.' || part === '..')) {
     throw Object.assign(new Error('Ruta de archivo inválida.'), { status: 400 })
   }
-  const absolute = path.resolve(uploadRoot, bucket, normalized)
-  const expectedRoot = path.resolve(uploadRoot, bucket) + path.sep
+  const bucketRoot = bucket === transferReceiptBucket
+    ? transferReceiptRoot
+    : bucket === 'rrhh-documentos'
+      ? employeeDocumentRoot
+      : path.resolve(uploadRoot, bucket)
+  const absolute = path.resolve(bucketRoot, normalized)
+  const expectedRoot = bucketRoot + path.sep
   if (!absolute.startsWith(expectedRoot)) throw Object.assign(new Error('Ruta de archivo inválida.'), { status: 400 })
   return { absolute, normalized }
 }
@@ -371,11 +384,15 @@ function validateUploadType(bucket, objectPath) {
   const extension = path.extname(objectPath).toLowerCase()
   const allowed = bucket === 'empresa-assets'
     ? new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif'])
+    : bucket === transferReceiptBucket
+      ? new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp'])
     : new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt'])
   if (!allowed.has(extension)) {
     throw Object.assign(new Error(bucket === 'empresa-assets'
       ? 'El logo debe ser PNG, JPG, WEBP o GIF.'
-      : 'Tipo de documento no permitido.'), { status: 400 })
+      : bucket === transferReceiptBucket
+        ? 'El comprobante debe ser PDF, PNG, JPG o WEBP.'
+        : 'Tipo de documento no permitido.'), { status: 400 })
   }
 }
 
@@ -384,10 +401,510 @@ async function authorizeStorage(userId, bucket, objectPath, write = false) {
   const access = await getCompanyAccess(userId, companyId)
   if (!access) throw Object.assign(new Error('No tienes acceso a los archivos de esta empresa.'), { status: 403 })
   if (access.isAdmin) return companyId
-  const required = bucket === 'rrhh-documentos' ? 'rrhh_documentos' : 'configuracion'
+  const required = bucket === 'rrhh-documentos'
+    ? 'rrhh_documentos'
+    : bucket === transferReceiptBucket
+      ? 'comprobantes_comisiones'
+      : 'configuracion'
   if (!access.modules.has(required)) throw Object.assign(new Error(write ? 'No tienes permiso para modificar estos archivos.' : 'No tienes permiso para abrir estos archivos.'), { status: 403 })
   return companyId
 }
+
+async function receiptAccess(user) {
+  const companyId = await getActiveCompany(user.id)
+  const access = companyId ? await getCompanyAccess(user.id, companyId) : null
+  if (!companyId || !hasAnyModule(access, ['comprobantes_comisiones'])) {
+    throw Object.assign(new Error('No tienes acceso a comprobantes y comisiones.'), { status: 403 })
+  }
+  const currentSeller = (await pool.query(`
+    select id, nombre, email, usuario_id, sueldo_base, moneda, rol_trabajador, configuracion_extra
+      from public.personas
+     where empresa_id = $1
+       and usuario_id = $2
+       and activo = true
+       and (rol_trabajador = 'vendedor' or configuracion_extra ->> 'rol_trabajador' = 'vendedor')
+     limit 1
+  `, [companyId, user.id])).rows[0] || null
+  return {
+    companyId,
+    access,
+    currentSeller,
+    canManageAll: Boolean(access?.isAdmin || access?.modules?.has('personas_pagos')),
+  }
+}
+
+function receiptList(data) {
+  return Array.isArray(data?.comprobantes_transferencia) ? data.comprobantes_transferencia : []
+}
+
+function quoteBelongsToSeller(quote, user) {
+  return String(quote.created_by || '') === String(user.id)
+    || String(quote.vendedor_email || '').toLowerCase() === String(user.email || '').toLowerCase()
+    || String(quote.data?.vendedorEmail || '').toLowerCase() === String(user.email || '').toLowerCase()
+}
+
+async function sellerById(client, companyId, sellerId) {
+  return (await client.query(`
+    select id, nombre, email, usuario_id, sueldo_base, moneda, rol_trabajador, configuracion_extra
+      from public.personas
+     where id = $1 and empresa_id = $2 and activo = true
+       and (rol_trabajador = 'vendedor' or configuracion_extra ->> 'rol_trabajador' = 'vendedor')
+     limit 1
+  `, [sellerId, companyId])).rows[0] || null
+}
+
+app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
+  const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : []
+  const fileName = String(req.body?.file_name || '').trim().slice(0, 255)
+  if (!sourceRows.length) return res.status(400).json({ error: 'El archivo no contiene cotizaciones válidas para importar.' })
+  if (sourceRows.length > 1000) return res.status(400).json({ error: 'Importa un máximo de 1.000 cotizaciones por archivo.' })
+
+  let client
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = companyId ? await getCompanyAccess(req.user.id, companyId) : null
+    if (!companyId || !hasAnyModule(access, ['cotizaciones'])) {
+      return res.status(403).json({ error: 'No tienes permiso para importar cotizaciones.' })
+    }
+
+    const normalized = sourceRows.map((row, index) => normalizeQuoteImportRow(row, {
+      importUid: row?.importacion_uid,
+      fileName: fileName || row?.importacion_archivo,
+      rowNumber: row?.source_row || index + 2,
+    }))
+    const invalid = normalized.filter((item) => !item.valid)
+    if (invalid.length) {
+      const first = invalid[0]
+      return res.status(400).json({
+        error: `La fila ${first.sourceRow || '?'} no es válida: ${first.errors.join(', ')}.`,
+        invalid_rows: invalid.length,
+      })
+    }
+
+    client = await pool.connect()
+    await client.query('begin')
+    const sellers = (await client.query(`
+      select id, nombre, email, usuario_id
+        from public.personas
+       where empresa_id = $1 and activo = true
+         and (rol_trabajador = 'vendedor' or configuracion_extra ->> 'rol_trabajador' = 'vendedor')
+    `, [companyId])).rows
+    const byEmail = new Map(sellers.filter((seller) => seller.email).map((seller) => [String(seller.email).toLowerCase(), seller]))
+    const byName = new Map(sellers.map((seller) => [String(seller.nombre).trim().toLowerCase(), seller]))
+    const imported = []
+
+    for (const item of normalized) {
+      const row = item.data
+      const seller = byEmail.get(String(row.vendedor_email || '').toLowerCase())
+        || byName.get(String(row.vendedor_nombre || '').trim().toLowerCase())
+        || null
+      const documentData = {
+        ...row.data,
+        vendedorNombre: seller?.nombre || row.vendedor_nombre || '',
+        vendedorEmail: seller?.email || row.vendedor_email || '',
+        savedAt: new Date().toISOString(),
+      }
+      const result = await client.query(`
+        insert into public.cotizacion_documentos (
+          empresa_id, tipo, estado, numero, serie_cotizacion, origen_documento,
+          importacion_uid, importacion_archivo, fecha_emision, fecha_vcto,
+          cliente_nombre, cliente_contacto, cliente_rut, cliente_direccion,
+          cliente_giro, cliente_comuna, cliente_telefono, cliente_ciudad, cliente_email,
+          vendedor_id, vendedor_nombre, vendedor_email, referencia, observaciones,
+          items, subtotal, neto, iva, total, data, emitida_at, created_by
+        ) values (
+          $1, 'COTIZACIÓN', 'cotizacion_emitida', $2, $3, 'importado',
+          $4, $5, $6, $7,
+          $8, $9, $10, $11,
+          $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22::jsonb, $23, $24, $25, $26, $27::jsonb, now(), $28
+        )
+        on conflict (empresa_id, importacion_uid) where importacion_uid is not null
+        do update set
+          numero = excluded.numero,
+          serie_cotizacion = excluded.serie_cotizacion,
+          importacion_archivo = excluded.importacion_archivo,
+          fecha_emision = excluded.fecha_emision,
+          fecha_vcto = excluded.fecha_vcto,
+          cliente_nombre = excluded.cliente_nombre,
+          cliente_contacto = excluded.cliente_contacto,
+          cliente_rut = excluded.cliente_rut,
+          cliente_direccion = excluded.cliente_direccion,
+          cliente_giro = excluded.cliente_giro,
+          cliente_comuna = excluded.cliente_comuna,
+          cliente_telefono = excluded.cliente_telefono,
+          cliente_ciudad = excluded.cliente_ciudad,
+          cliente_email = excluded.cliente_email,
+          vendedor_id = excluded.vendedor_id,
+          vendedor_nombre = excluded.vendedor_nombre,
+          vendedor_email = excluded.vendedor_email,
+          referencia = excluded.referencia,
+          observaciones = excluded.observaciones,
+          subtotal = excluded.subtotal,
+          neto = excluded.neto,
+          iva = excluded.iva,
+          total = excluded.total,
+          data = coalesce(public.cotizacion_documentos.data, '{}'::jsonb)
+            || (excluded.data - 'comprobantes_transferencia'),
+          updated_at = now()
+        returning id, numero, serie_cotizacion, fecha_emision, cliente_nombre
+      `, [
+        companyId, row.numero, row.serie_cotizacion, row.importacion_uid, row.importacion_archivo,
+        row.fecha_emision, row.fecha_vcto, row.cliente_nombre, row.cliente_contacto, row.cliente_rut,
+        row.cliente_direccion, row.cliente_giro, row.cliente_comuna, row.cliente_telefono,
+        row.cliente_ciudad, row.cliente_email, seller?.id || null, seller?.nombre || row.vendedor_nombre,
+        seller?.email || row.vendedor_email, row.referencia, row.observaciones, JSON.stringify(row.items || []),
+        row.subtotal, row.neto, row.iva, row.total, JSON.stringify(documentData), req.user.id,
+      ])
+      imported.push(result.rows[0])
+    }
+
+    const thSeriesNumbers = normalized
+      .filter((item) => item.data.serie_cotizacion === 'TH')
+      .map((item) => Number(item.data.numero || 0))
+    if (thSeriesNumbers.length) {
+      const greatestNumber = Math.max(11865, ...thSeriesNumbers)
+      await client.query(`
+        insert into public.erp_counters (empresa_id, key, last_value)
+        values ($1, 'cotizacion', $2)
+        on conflict (empresa_id, key) do update
+        set last_value = greatest(public.erp_counters.last_value, excluded.last_value), updated_at = now()
+      `, [companyId, greatestNumber])
+    }
+    await client.query('commit')
+    res.status(201).json({ data: { processed: imported.length, rows: imported } })
+  } catch (error) {
+    if (client) await client.query('rollback').catch(() => {})
+    const schemaMissing = ['42703', '42P10'].includes(error.code)
+    const formatted = schemaMissing
+      ? { status: 503, message: 'Falta instalar la migración de importación de cotizaciones en PostgreSQL.' }
+      : error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: error.code })
+  } finally {
+    client?.release()
+  }
+})
+
+app.get('/api/comprobantes', authenticate, async (req, res) => {
+  try {
+    const scope = await receiptAccess(req.user)
+    if (!scope.canManageAll && !scope.currentSeller) {
+      return res.status(403).json({ error: 'Tu cuenta debe estar vinculada a una ficha con rol de vendedor.' })
+    }
+    const sellers = (await pool.query(`
+      select id, nombre, email, usuario_id, sueldo_base, moneda, rol_trabajador, configuracion_extra
+        from public.personas
+       where empresa_id = $1
+         and activo = true
+         and (rol_trabajador = 'vendedor' or configuracion_extra ->> 'rol_trabajador' = 'vendedor')
+       order by nombre
+    `, [scope.companyId])).rows
+    const quoteResult = await pool.query(`
+      select id, numero, pre_numero, fecha_emision, cliente_id, cliente_nombre, cliente_rut,
+             serie_cotizacion, origen_documento, importacion_archivo, vendedor_id,
+             vendedor_nombre, vendedor_email, items, neto, total, data, created_by, created_at, updated_at
+        from public.cotizacion_documentos
+       where empresa_id = $1
+         and numero is not null
+       order by coalesce(fecha_emision, created_at::date) desc, numero desc
+       limit 2000
+    `, [scope.companyId])
+    const quotes = (scope.canManageAll
+      ? quoteResult.rows
+      : quoteResult.rows.filter((quote) => quoteBelongsToSeller(quote, req.user)))
+      .map((quote) => ({ ...quote, neto_calculable: quoteNetAmount(quote) }))
+    const visibleSellers = scope.canManageAll ? sellers : sellers.filter((seller) => seller.id === scope.currentSeller.id)
+    res.json({
+      data: {
+        quotes,
+        sellers: visibleSellers.map((seller) => ({ ...seller, commission_rules: commercialRules(seller.configuracion_extra) })),
+        can_manage_all: scope.canManageAll,
+        current_person_id: scope.currentSeller?.id || null,
+        storage_location: displayStoragePath(transferReceiptRoot),
+      },
+    })
+  } catch (error) {
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message })
+  }
+})
+
+app.patch('/api/comprobantes/reglas', authenticate, async (req, res) => {
+  try {
+    const scope = await receiptAccess(req.user)
+    if (!scope.canManageAll && !scope.currentSeller) {
+      return res.status(403).json({ error: 'Tu cuenta debe estar vinculada a una ficha con rol de vendedor.' })
+    }
+    const sellerId = scope.canManageAll ? String(req.body?.vendedor_id || '') : String(scope.currentSeller.id)
+    const rules = validateCommercialRules(req.body || {})
+    const result = await pool.query(`
+      update public.personas
+         set rol_trabajador = 'vendedor',
+             configuracion_extra = jsonb_set(
+               jsonb_set(coalesce(configuracion_extra, '{}'::jsonb), '{rol_trabajador}', '"vendedor"'::jsonb, true),
+               '{comercial}',
+               coalesce(configuracion_extra -> 'comercial', '{}'::jsonb) || $3::jsonb,
+               true
+             ),
+             updated_at = now()
+       where id = $1 and empresa_id = $2 and activo = true
+         and (rol_trabajador = 'vendedor' or configuracion_extra ->> 'rol_trabajador' = 'vendedor')
+       returning id, nombre, email, usuario_id, sueldo_base, moneda, rol_trabajador, configuracion_extra
+    `, [sellerId, scope.companyId, JSON.stringify(rules)])
+    if (!result.rowCount) return res.status(404).json({ error: 'No se encontró el vendedor seleccionado.' })
+    res.json({ data: { seller: { ...result.rows[0], commission_rules: rules } } })
+  } catch (error) {
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: error.code })
+  }
+})
+
+app.post('/api/comprobantes', authenticate, upload.single('file'), async (req, res) => {
+  let writtenPath = ''
+  let client
+  try {
+    if (!req.file) throw Object.assign(new Error('Selecciona el comprobante de transferencia.'), { status: 400 })
+    const scope = await receiptAccess(req.user)
+    if (!scope.canManageAll && !scope.currentSeller) throw Object.assign(new Error('Tu cuenta debe estar vinculada a una ficha con rol de vendedor.'), { status: 403 })
+    const quoteId = String(req.body?.quote_id || '')
+    const transferDate = String(req.body?.fecha_transferencia || '')
+    const transferRut = formatRut(req.body?.rut_transferencia || '')
+    const operationType = String(req.body?.tipo_operacion || '')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(transferDate)) throw Object.assign(new Error('Indica una fecha de transferencia válida.'), { status: 400 })
+    if (!isValidRut(transferRut)) throw Object.assign(new Error('El RUT de quien transfirió no es válido.'), { status: 400 })
+    if (!['arriendo', 'trabajo_hidraulico', 'venta_apilador'].includes(operationType)) {
+      throw Object.assign(new Error('Selecciona el tipo de negocio asociado al pago.'), { status: 400 })
+    }
+
+    client = await pool.connect()
+    await client.query('begin')
+    const quote = (await client.query(`
+      select id, numero, fecha_emision, cliente_id, cliente_nombre, cliente_rut, neto, total,
+             data, created_by
+        from public.cotizacion_documentos
+       where id = $1 and empresa_id = $2 and numero is not null
+       for update
+    `, [quoteId, scope.companyId])).rows[0]
+    if (!quote) throw Object.assign(new Error('La cotización seleccionada no existe o aún no tiene número final.'), { status: 404 })
+    if (!scope.canManageAll && !quoteBelongsToSeller(quote, req.user)) throw Object.assign(new Error('Solo puedes registrar comprobantes de tus propias cotizaciones.'), { status: 403 })
+
+    const sellerId = scope.canManageAll ? String(req.body?.vendedor_id || '') : String(scope.currentSeller.id)
+    const seller = await sellerById(client, scope.companyId, sellerId)
+    if (!seller) throw Object.assign(new Error('Selecciona un vendedor activo.'), { status: 400 })
+
+    const quoteCurrency = String(quote.data?.moneda || 'CLP').toUpperCase()
+    const exchangeRate = quoteCurrency === 'CLP' ? 1 : Number(req.body?.tipo_cambio_clp || 0)
+    if (operationType === 'trabajo_hidraulico' && quoteCurrency !== 'CLP' && !(exchangeRate > 0)) {
+      throw Object.assign(new Error(`Indica el tipo de cambio a CLP para calcular la comisión de esta cotización en ${quoteCurrency}.`), { status: 400 })
+    }
+    const netQuote = quoteNetAmount(quote)
+    const netClp = quoteCurrency === 'CLP' ? netQuote : netQuote * exchangeRate
+    const costClp = Number(req.body?.costo_trabajo_clp || 0)
+    const rules = commercialRules(seller.configuracion_extra)
+    const calculation = calculateCommission({
+      tipo: operationType,
+      neto: netClp,
+      costo: costClp,
+      meses: req.body?.meses_arriendo,
+      cantidad: req.body?.cantidad_apiladores,
+      rules,
+    })
+    const manualSource = String(req.body?.comision_manual_clp ?? '').trim()
+    const manualCommission = manualSource === '' ? null : Number(manualSource)
+    if (manualCommission !== null && (!Number.isFinite(manualCommission) || manualCommission < 0 || manualCommission > 100_000_000)) {
+      throw Object.assign(new Error('La comisión acordada debe estar entre $0 y $100.000.000.'), { status: 400 })
+    }
+
+    const originalExtension = path.extname(req.file.originalname || '').toLowerCase()
+    const baseName = receiptFilename({ folio: quote.numero, transferDate, rut: transferRut, extension: originalExtension })
+    const year = transferDate.slice(0, 4)
+    let objectPath = `${scope.companyId}/${year}/${baseName}`
+    let suffix = 2
+    while (existsSync(safeStoragePath(transferReceiptBucket, objectPath).absolute)) {
+      const extension = path.extname(baseName)
+      objectPath = `${scope.companyId}/${year}/${baseName.slice(0, -extension.length)}_${suffix}${extension}`
+      suffix += 1
+    }
+    const target = safeStoragePath(transferReceiptBucket, objectPath)
+    validateUploadType(transferReceiptBucket, target.normalized)
+    await mkdir(path.dirname(target.absolute), { recursive: true })
+    await writeFile(target.absolute, req.file.buffer)
+    writtenPath = target.absolute
+
+    const receipt = {
+      id: randomUUID(),
+      cotizacion_id: String(quote.id),
+      cotizacion_numero: String(quote.numero),
+      cliente_id: quote.cliente_id || null,
+      cliente_nombre: quote.cliente_nombre || '',
+      cliente_rut: quote.cliente_rut || '',
+      vendedor_id: seller.id,
+      vendedor_usuario_id: seller.usuario_id || null,
+      vendedor_nombre: seller.nombre,
+      vendedor_email: seller.email || '',
+      fecha_transferencia: transferDate,
+      rut_transferencia: transferRut,
+      tipo_operacion: operationType,
+      moneda_cotizacion: quoteCurrency,
+      tipo_cambio_clp: exchangeRate,
+      neto_cotizacion: netQuote,
+      neto_calculo_clp: netClp,
+      costo_trabajo_clp: costClp,
+      ganancia_calculo_clp: calculation.profit,
+      meses_arriendo: calculation.months,
+      cantidad_apiladores: calculation.quantity,
+      comision_calculada_clp: calculation.commission,
+      comision_clp: manualCommission ?? calculation.commission,
+      comision_origen: manualCommission === null ? 'regla_vendedor' : 'manual',
+      reglas_aplicadas: rules,
+      notas: String(req.body?.notas || '').trim().slice(0, 1000),
+      archivo_path: target.normalized,
+      archivo_nombre: path.basename(target.normalized),
+      archivo_original: String(req.file.originalname || '').slice(0, 255),
+      archivo_mime: req.file.mimetype || '',
+      archivo_bytes: req.file.size,
+      subido_por: req.user.id,
+      subido_en: new Date().toISOString(),
+    }
+    const receipts = [...receiptList(quote.data), receipt]
+    await client.query(`
+      update public.cotizacion_documentos
+         set data = jsonb_set(coalesce(data, '{}'::jsonb), '{comprobantes_transferencia}', $3::jsonb, true),
+             updated_at = now()
+       where id = $1 and empresa_id = $2
+    `, [quote.id, scope.companyId, JSON.stringify(receipts)])
+    await client.query('commit')
+    res.status(201).json({ data: { receipt } })
+  } catch (error) {
+    if (client) await client.query('rollback').catch(() => {})
+    if (writtenPath) await rm(writtenPath, { force: true }).catch(() => {})
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: error.code })
+  } finally {
+    client?.release()
+  }
+})
+
+app.post('/api/comprobantes/recalcular', authenticate, async (req, res) => {
+  let client
+  try {
+    const scope = await receiptAccess(req.user)
+    if (!scope.canManageAll && !scope.currentSeller) {
+      return res.status(403).json({ error: 'Tu cuenta debe estar vinculada a una ficha con rol de vendedor.' })
+    }
+    const month = String(req.body?.month || '')
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Selecciona un mes válido para recalcular.' })
+    const sellerId = scope.canManageAll ? String(req.body?.vendedor_id || '') : String(scope.currentSeller.id)
+
+    client = await pool.connect()
+    await client.query('begin')
+    const seller = await sellerById(client, scope.companyId, sellerId)
+    if (!seller) throw Object.assign(new Error('Selecciona un vendedor activo.'), { status: 400 })
+    const rules = commercialRules(seller.configuracion_extra)
+    const quotes = (await client.query(`
+      select id, numero, items, neto, total, data
+        from public.cotizacion_documentos
+       where empresa_id = $1
+         and jsonb_typeof(data -> 'comprobantes_transferencia') = 'array'
+       for update
+    `, [scope.companyId])).rows
+
+    let recalculated = 0
+    let totalCommission = 0
+    for (const quote of quotes) {
+      let changed = false
+      const receipts = receiptList(quote.data).map((receipt) => {
+        if (String(receipt.vendedor_id || '') !== sellerId || !String(receipt.fecha_transferencia || '').startsWith(`${month}-`)) return receipt
+        if (receipt.comision_origen === 'manual') {
+          totalCommission += Number(receipt.comision_clp || 0)
+          return receipt
+        }
+        const rate = Number(receipt.tipo_cambio_clp || 1)
+        const quoteCurrency = String(receipt.moneda_cotizacion || 'CLP').toUpperCase()
+        const storedNet = Number(receipt.neto_calculo_clp || 0)
+        const netClp = storedNet > 0 ? storedNet : quoteNetAmount(quote) * (quoteCurrency === 'CLP' ? 1 : rate)
+        const calculation = calculateCommission({
+          tipo: receipt.tipo_operacion,
+          neto: netClp,
+          costo: receipt.costo_trabajo_clp,
+          meses: receipt.meses_arriendo,
+          cantidad: receipt.cantidad_apiladores,
+          rules,
+        })
+        changed = true
+        recalculated += 1
+        totalCommission += calculation.commission
+        return {
+          ...receipt,
+          neto_calculo_clp: netClp,
+          ganancia_calculo_clp: calculation.profit,
+          comision_calculada_clp: calculation.commission,
+          comision_clp: calculation.commission,
+          comision_origen: 'regla_vendedor',
+          reglas_aplicadas: rules,
+          recalculado_en: new Date().toISOString(),
+        }
+      })
+      if (changed) {
+        await client.query(`
+          update public.cotizacion_documentos
+             set data = jsonb_set(coalesce(data, '{}'::jsonb), '{comprobantes_transferencia}', $3::jsonb, true),
+                 updated_at = now()
+           where id = $1 and empresa_id = $2
+        `, [quote.id, scope.companyId, JSON.stringify(receipts)])
+      }
+    }
+    await client.query('commit')
+    res.json({ data: { recalculated, total_commission: totalCommission, rules } })
+  } catch (error) {
+    if (client) await client.query('rollback').catch(() => {})
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: error.code })
+  } finally {
+    client?.release()
+  }
+})
+
+app.delete('/api/comprobantes/:quoteId/:receiptId', authenticate, async (req, res) => {
+  let client
+  try {
+    const scope = await receiptAccess(req.user)
+    client = await pool.connect()
+    await client.query('begin')
+    const quote = (await client.query(`
+      select id, data, created_by
+        from public.cotizacion_documentos
+       where id = $1 and empresa_id = $2
+       for update
+    `, [req.params.quoteId, scope.companyId])).rows[0]
+    if (!quote) throw Object.assign(new Error('Cotización no encontrada.'), { status: 404 })
+    const receipts = receiptList(quote.data)
+    const receipt = receipts.find((item) => String(item.id) === String(req.params.receiptId))
+    if (!receipt) throw Object.assign(new Error('Comprobante no encontrado.'), { status: 404 })
+    const ownsReceipt = String(receipt.vendedor_usuario_id || '') === String(req.user.id) || quoteBelongsToSeller(quote, req.user)
+    if (!scope.canManageAll && !ownsReceipt) throw Object.assign(new Error('No puedes eliminar comprobantes de otro vendedor.'), { status: 403 })
+    const remaining = receipts.filter((item) => String(item.id) !== String(req.params.receiptId))
+    await client.query(`
+      update public.cotizacion_documentos
+         set data = jsonb_set(coalesce(data, '{}'::jsonb), '{comprobantes_transferencia}', $3::jsonb, true),
+             updated_at = now()
+       where id = $1 and empresa_id = $2
+    `, [quote.id, scope.companyId, JSON.stringify(remaining)])
+    await client.query('commit')
+    if (receipt.archivo_path) {
+      const target = safeStoragePath(transferReceiptBucket, receipt.archivo_path)
+      await rm(target.absolute, { force: true })
+    }
+    res.json({ data: { id: receipt.id } })
+  } catch (error) {
+    if (client) await client.query('rollback').catch(() => {})
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message })
+  } finally {
+    client?.release()
+  }
+})
 
 app.post('/api/storage/:bucket/upload', authenticate, upload.single('file'), async (req, res) => {
   try {

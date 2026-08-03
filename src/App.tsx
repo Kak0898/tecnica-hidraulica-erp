@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { CambioClaveInicial } from './pages/CambioClaveInicial';
 import { usePermisos } from './lib/permisos';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
+import { FileSpreadsheet } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })))
 const Maquinaria = lazy(() => import('./pages/Maquinaria').then((module) => ({ default: module.Maquinaria })))
@@ -28,6 +29,8 @@ const FlotaVehiculos = lazy(() => import('./pages/FlotaVehiculos').then((module)
 const PublicacionesProductos = lazy(() => import('./pages/PublicacionesProductos').then((module) => ({ default: module.PublicacionesProductos })))
 const EppRopa = lazy(() => import('./pages/EppRopa').then((module) => ({ default: module.EppRopa })))
 const UsuariosPermisos = lazy(() => import('./pages/UsuariosPermisos').then((module) => ({ default: module.UsuariosPermisos })))
+const ComprobantesComisiones = lazy(() => import('./pages/ComprobantesComisiones').then((module) => ({ default: module.ComprobantesComisiones })))
+const ImportarCotizaciones = lazy(() => import('./components/ImportarCotizaciones').then((module) => ({ default: module.ImportarCotizaciones })))
 
 function CargandoModulo() {
  return <div className="flex min-h-[50vh] items-center justify-center"><div className="text-center"><div className="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" /><p className="text-sm font-semibold text-slate-500">Abriendo sección...</p></div></div>
@@ -46,6 +49,8 @@ function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' })
  const { loading, activeEmpresa, activeEmpresaId, userEmail } = useEmpresa()
  const isPresupuesto = modo === 'presupuesto'
  const titulo = isPresupuesto ? 'Presupuestos' : 'Cotizaciones'
+ const [showImporter, setShowImporter] = useState(false)
+ const [documentVersion, setDocumentVersion] = useState(0)
 
  return <div className="space-y-4">
   <div className="rounded border border-slate-200 bg-white p-4 shadow-sm">
@@ -62,15 +67,18 @@ function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' })
         : 'Sin empresa activa. Configura una empresa para emitir documentos con logo y datos comerciales.'}
      </p>
     </div>
-    <div className="rounded bg-slate-100 px-3 py-2 text-sm text-slate-700">
-     {userEmail || 'Sin sesión'}
+    <div className="flex flex-wrap items-center justify-end gap-2">
+     {!isPresupuesto && <button type="button" onClick={() => setShowImporter((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white"><FileSpreadsheet size={17} />Importar cotizaciones</button>}
+     <div className="rounded bg-slate-100 px-3 py-2 text-sm text-slate-700">{userEmail || 'Sin sesión'}</div>
     </div>
    </div>
   </div>
 
+  {!isPresupuesto && showImporter && <Suspense fallback={<div className="rounded-2xl border border-blue-200 bg-white p-5 text-sm font-bold text-blue-700">Preparando importador de cotizaciones...</div>}><ImportarCotizaciones onClose={() => setShowImporter(false)} onImported={() => setDocumentVersion((current) => current + 1)} /></Suspense>}
+
   <div className="h-[calc(100vh-10rem)] min-h-[720px] overflow-hidden rounded border border-slate-200 bg-white">
    <iframe
-    key={`${activeEmpresaId || 'sin-empresa'}-${modo}`}
+    key={`${activeEmpresaId || 'sin-empresa'}-${modo}-${documentVersion}`}
     title={`${titulo} ERP`}
     src={`/modulos/cotizaciones/index.html?modo=${modo}`}
     className="h-full w-full border-0"
@@ -118,6 +126,7 @@ export default function App(){
   {page==='empresas-asociadas' && <EmpresasAsociadas/>}
   {page==='presupuestos' && <DocumentosComerciales modo="presupuesto"/>}
   {page==='cotizaciones' && <DocumentosComerciales modo="cotizacion"/>}
+  {page==='comprobantes-comisiones' && <ComprobantesComisiones/>}
   {page==='publicaciones-productos' && <PublicacionesProductos/>}
   {page==='ordenes' && <OrdenesTrabajo/>}
   {page==='crm' && <CRM/>}

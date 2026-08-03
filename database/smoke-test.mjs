@@ -28,6 +28,8 @@ async function asUser(userId, callback) {
 try {
   const schema = await readFile(path.join(root, 'database/postgresql.sql'), 'utf8')
   await database.exec(schema)
+  const commissionImportMigration = await readFile(path.join(root, 'database/migrations/20260729-comisiones-personales-importacion-cotizaciones.sql'), 'utf8')
+  await database.exec(commissionImportMigration)
 
   const tables = await database.query(
     `select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
@@ -74,7 +76,8 @@ try {
       `insert into public.cotizacion_documentos
          (empresa_id, tipo, estado, numero, cliente_nombre, items, data, subtotal, neto, iva, total)
        values
-         ($1, 'COTIZACIÓN', 'cotizacion_emitida', 1, 'Cliente creado desde cotización', '[]', '{}', 2, 2, 0.38, 2.38)`,
+         ($1, 'COTIZACIÓN', 'cotizacion_emitida', 1, 'Cliente creado desde cotización', '[]', '{}', 2, 2, 0.38, 2.38),
+         ($1, 'COTIZACIÓN', 'cotizacion_emitida', 1, 'Cliente histórico mismo folio', '[]', '{}', 3, 3, 0.57, 3.57)`,
       [companyId],
     )
   })
@@ -112,9 +115,10 @@ try {
        (select count(*)::int from public.spare_parts) as spare_parts,
        (select count(*)::int from public.epp_items) as epp_items,
        (select count(*)::int from public.cotizacion_documentos) as quotes,
+       (select count(*)::int from public.cotizacion_documentos where numero = 1) as repeated_quote_numbers,
        (select count(*)::int from public.clientes where razon_social = 'Cliente creado desde cotización') as quote_clients`,
   )
-  assert.deepEqual(counts.rows[0], { machines: 2, spare_parts: 1, epp_items: 1, quotes: 1, quote_clients: 1 })
+  assert.deepEqual(counts.rows[0], { machines: 2, spare_parts: 1, epp_items: 1, quotes: 2, repeated_quote_numbers: 2, quote_clients: 1 })
   console.log('PostgreSQL smoke test correcto: esquema, cotizaciones, importación y aislamiento multiempresa.')
 } finally {
   await database.close()

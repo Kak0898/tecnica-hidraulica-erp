@@ -24,6 +24,15 @@ type Empresa = {
   firma_celular?: string
   condiciones_default?: string
   observaciones_default?: string
+  transferencia_banco?: string
+  transferencia_rut?: string
+  transferencia_tipo_cuenta?: string
+  transferencia_numero_cuenta?: string
+  transferencia_email_fallback?: string
+  transferencia_asunto_template?: string
+  comision_arriendo_mensual?: number
+  comision_trabajo_hidraulico_pct?: number
+  comision_venta_apilador?: number
 }
 
 type UsuarioEmpresa = {
@@ -71,6 +80,15 @@ export function SupabaseSetup() {
     firma_celular: '',
     condiciones_default: '',
     observaciones_default: '',
+    transferencia_banco: 'Banco de Chile',
+    transferencia_rut: '76.171.450-3',
+    transferencia_tipo_cuenta: 'Cuenta corriente',
+    transferencia_numero_cuenta: '9010944505',
+    transferencia_email_fallback: 'francodareck@tecnicahidraulica.cl',
+    transferencia_asunto_template: 'Pago {{folio}} - {{vendedor}}',
+    comision_arriendo_mensual: 35000,
+    comision_trabajo_hidraulico_pct: 6,
+    comision_venta_apilador: 600000,
   })
 
   const activeEmpresa = useMemo(() => {
@@ -109,7 +127,7 @@ export function SupabaseSetup() {
 
     const { data, error } = await supabase
       .from('usuarios_empresas')
-      .select('rol, empresas(id, nombre, slug, razon_social, rut, email, telefono, direccion, website, logo_url, logo_path, descripcion_corta, firma_nombre, firma_cargo, firma_email, firma_telefono, firma_celular, condiciones_default, observaciones_default)')
+      .select('rol, empresas(id, nombre, slug, razon_social, rut, email, telefono, direccion, website, logo_url, logo_path, descripcion_corta, firma_nombre, firma_cargo, firma_email, firma_telefono, firma_celular, condiciones_default, observaciones_default, transferencia_banco, transferencia_rut, transferencia_tipo_cuenta, transferencia_numero_cuenta, transferencia_email_fallback, transferencia_asunto_template, comision_arriendo_mensual, comision_trabajo_hidraulico_pct, comision_venta_apilador)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
 
@@ -135,6 +153,12 @@ export function SupabaseSetup() {
       || loadedEmpresas[0]?.empresas
 
     if (selectedEmpresa) {
+      const { data: commercialPeople } = await supabase
+        .from('personas')
+        .select('configuracion_extra')
+        .eq('empresa_id', selectedEmpresa.id)
+      const storedCommercial = ((commercialPeople || []).find((person: { configuracion_extra?: Record<string, unknown> }) => person.configuracion_extra?.rol_trabajador === 'vendedor')
+        ?.configuracion_extra?.comercial || {}) as Partial<typeof brandingForm>
       setBrandingForm({
         razon_social: selectedEmpresa.razon_social || selectedEmpresa.nombre || '',
         rut: selectedEmpresa.rut || '',
@@ -151,6 +175,15 @@ export function SupabaseSetup() {
         firma_celular: selectedEmpresa.firma_celular || '',
         condiciones_default: selectedEmpresa.condiciones_default || '',
         observaciones_default: selectedEmpresa.observaciones_default || '',
+        transferencia_banco: String(storedCommercial.transferencia_banco || selectedEmpresa.transferencia_banco || 'Banco de Chile'),
+        transferencia_rut: String(storedCommercial.transferencia_rut || selectedEmpresa.transferencia_rut || '76.171.450-3'),
+        transferencia_tipo_cuenta: String(storedCommercial.transferencia_tipo_cuenta || selectedEmpresa.transferencia_tipo_cuenta || 'Cuenta corriente'),
+        transferencia_numero_cuenta: String(storedCommercial.transferencia_numero_cuenta || selectedEmpresa.transferencia_numero_cuenta || '9010944505'),
+        transferencia_email_fallback: String(storedCommercial.transferencia_email_fallback || selectedEmpresa.transferencia_email_fallback || 'francodareck@tecnicahidraulica.cl'),
+        transferencia_asunto_template: String(storedCommercial.transferencia_asunto_template || selectedEmpresa.transferencia_asunto_template || 'Pago {{folio}} - {{vendedor}}'),
+        comision_arriendo_mensual: Number(storedCommercial.comision_arriendo_mensual ?? selectedEmpresa.comision_arriendo_mensual ?? 35000),
+        comision_trabajo_hidraulico_pct: Number(storedCommercial.comision_trabajo_hidraulico_pct ?? selectedEmpresa.comision_trabajo_hidraulico_pct ?? 6),
+        comision_venta_apilador: Number(storedCommercial.comision_venta_apilador ?? selectedEmpresa.comision_venta_apilador ?? 600000),
       })
     }
 
@@ -302,7 +335,7 @@ export function SupabaseSetup() {
     await load()
   }
 
-  function updateBrandingForm(key: keyof typeof brandingForm, value: string) {
+  function updateBrandingForm(key: keyof typeof brandingForm, value: string | number) {
     setBrandingForm((current) => ({
       ...current,
       [key]: value,
@@ -437,6 +470,15 @@ export function SupabaseSetup() {
         firma_celular: brandingForm.firma_celular.trim() || null,
         condiciones_default: brandingForm.condiciones_default.trim() || null,
         observaciones_default: brandingForm.observaciones_default.trim() || null,
+        transferencia_banco: brandingForm.transferencia_banco.trim() || null,
+        transferencia_rut: brandingForm.transferencia_rut.trim() || null,
+        transferencia_tipo_cuenta: brandingForm.transferencia_tipo_cuenta.trim() || null,
+        transferencia_numero_cuenta: brandingForm.transferencia_numero_cuenta.trim() || null,
+        transferencia_email_fallback: brandingForm.transferencia_email_fallback.trim() || null,
+        transferencia_asunto_template: brandingForm.transferencia_asunto_template.trim() || 'Pago {{folio}} - {{vendedor}}',
+        comision_arriendo_mensual: Number(brandingForm.comision_arriendo_mensual || 0),
+        comision_trabajo_hidraulico_pct: Number(brandingForm.comision_trabajo_hidraulico_pct || 0),
+        comision_venta_apilador: Number(brandingForm.comision_venta_apilador || 0),
       })
       .eq('id', activeEmpresaId)
 
@@ -447,7 +489,7 @@ export function SupabaseSetup() {
       return
     }
 
-    setMessage('Datos comerciales guardados.')
+    setMessage('Datos comerciales generales guardados. Las reglas personales de cada vendedor se mantienen sin cambios.')
     window.dispatchEvent(new CustomEvent('erp-company-updated'))
     await load()
   }
@@ -756,6 +798,22 @@ export function SupabaseSetup() {
           <input className="rounded border border-slate-300 px-3 py-3" placeholder="URL logo externa" value={brandingForm.logo_url} onChange={(event) => updateBrandingForm('logo_url', event.target.value)} />
           <textarea className="min-h-28 rounded border border-slate-300 px-3 py-3 md:col-span-2" placeholder="Observaciones por defecto" value={brandingForm.observaciones_default} onChange={(event) => updateBrandingForm('observaciones_default', event.target.value)} />
           <textarea className="min-h-24 rounded border border-slate-300 px-3 py-3 md:col-span-2" placeholder="Condiciones por defecto" value={brandingForm.condiciones_default} onChange={(event) => updateBrandingForm('condiciones_default', event.target.value)} />
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50/60 p-4">
+          <h4 className="font-black text-slate-950">Transferencias y reglas comerciales</h4>
+          <p className="mt-1 text-sm text-slate-600">Se muestran a los vendedores; los datos bancarios también se incorporan al documento comercial.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input className="rounded border border-slate-300 px-3 py-3" placeholder="Banco" value={brandingForm.transferencia_banco} onChange={(event) => updateBrandingForm('transferencia_banco', event.target.value)} />
+            <input className="rounded border border-slate-300 px-3 py-3" placeholder="RUT titular" value={brandingForm.transferencia_rut} onChange={(event) => updateBrandingForm('transferencia_rut', event.target.value)} />
+            <input className="rounded border border-slate-300 px-3 py-3" placeholder="Tipo de cuenta" value={brandingForm.transferencia_tipo_cuenta} onChange={(event) => updateBrandingForm('transferencia_tipo_cuenta', event.target.value)} />
+            <input className="rounded border border-slate-300 px-3 py-3" placeholder="Número de cuenta" value={brandingForm.transferencia_numero_cuenta} onChange={(event) => updateBrandingForm('transferencia_numero_cuenta', event.target.value)} />
+            <input type="email" className="rounded border border-slate-300 px-3 py-3" placeholder="Correo de respaldo" value={brandingForm.transferencia_email_fallback} onChange={(event) => updateBrandingForm('transferencia_email_fallback', event.target.value)} />
+            <label className="text-xs font-bold text-slate-600">Asunto de transferencia<input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 text-sm font-normal" value={brandingForm.transferencia_asunto_template} onChange={(event) => updateBrandingForm('transferencia_asunto_template', event.target.value)} /><span className="mt-1 block font-normal">Variables: {'{{folio}}'}, {'{{vendedor}}'} y {'{{email}}'}.</span></label>
+            <label className="text-xs font-bold text-slate-600">Comisión arriendo por mes<input type="number" min="0" className="mt-1 w-full rounded border border-slate-300 px-3 py-3 text-sm font-normal" value={brandingForm.comision_arriendo_mensual} onChange={(event) => updateBrandingForm('comision_arriendo_mensual', Number(event.target.value))} /></label>
+            <label className="text-xs font-bold text-slate-600">Comisión trabajo hidráulico (% ganancia)<input type="number" min="0" max="100" step="0.01" className="mt-1 w-full rounded border border-slate-300 px-3 py-3 text-sm font-normal" value={brandingForm.comision_trabajo_hidraulico_pct} onChange={(event) => updateBrandingForm('comision_trabajo_hidraulico_pct', Number(event.target.value))} /></label>
+            <label className="text-xs font-bold text-slate-600">Comisión venta de apilador<input type="number" min="0" className="mt-1 w-full rounded border border-slate-300 px-3 py-3 text-sm font-normal" value={brandingForm.comision_venta_apilador} onChange={(event) => updateBrandingForm('comision_venta_apilador', Number(event.target.value))} /></label>
+          </div>
         </div>
 
         <button

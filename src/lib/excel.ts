@@ -38,6 +38,21 @@ const knownHeaderKeys = new Set([
   'tallazapato',
   'tallaoverol',
   'tallageologo',
+  'numero',
+  'numerocotizacion',
+  'folio',
+  'serie',
+  'fecha',
+  'fechaemision',
+  'cliente',
+  'razonsocial',
+  'rutcliente',
+  'moneda',
+  'neto',
+  'iva',
+  'total',
+  'vendedor',
+  'correovendedor',
 ])
 
 export type ExcelSheetData = {

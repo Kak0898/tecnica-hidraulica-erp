@@ -1,6 +1,6 @@
 export const ALL_MODULES = [
   'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
-  'presupuestos', 'cotizaciones', 'publicaciones', 'ordenes',
+  'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'ordenes',
   'crm', 'whatsapp', 'rrhh_personas', 'rrhh_contratos',
   'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos',
   'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'auditorias',
@@ -24,7 +24,7 @@ export const TABLE_ACCESS = {
   erp_counters: access(['presupuestos', 'cotizaciones'], ['presupuestos', 'cotizaciones']),
   cotizaciones: access(['cotizaciones'], ['cotizaciones']),
   cotizacion_items: access(['cotizaciones'], ['cotizaciones']),
-  cotizacion_documentos: access(['presupuestos', 'cotizaciones', 'ordenes'], ['presupuestos', 'cotizaciones']),
+  cotizacion_documentos: access(['presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'ordenes'], ['presupuestos', 'cotizaciones', 'comprobantes_comisiones']),
   ordenes_trabajo: access(['ordenes', 'ia'], ['ordenes']),
   audits: access(['auditorias'], ['auditorias']),
   equipo_eventos: access(['maquinaria', 'ordenes', 'auditorias'], ['maquinaria', 'ordenes', 'auditorias']),
@@ -32,7 +32,7 @@ export const TABLE_ACCESS = {
   import_logs: access(['importar_excel'], ['importar_excel']),
 
   personas: access(
-    ['rrhh_personas', 'rrhh_contratos', 'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos', 'flota', 'epp_ropa', 'usuarios_permisos'],
+    ['rrhh_personas', 'rrhh_contratos', 'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos', 'flota', 'epp_ropa', 'usuarios_permisos', 'presupuestos', 'cotizaciones', 'comprobantes_comisiones'],
     ['rrhh_personas', 'personas_pagos'],
   ),
   pagos_personas: access(['personas_pagos'], ['personas_pagos']),

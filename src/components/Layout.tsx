@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
+import { BadgeDollarSign, BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { usePermisos } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
@@ -19,6 +19,7 @@ const groups = [
       { key: 'empresas-asociadas', label: 'Empresas asociadas', icon: Handshake },
       { key: 'presupuestos', label: 'Presupuestos', icon: FileText },
       { key: 'cotizaciones', label: 'Cotizaciones', icon: ReceiptText },
+      { key: 'comprobantes-comisiones', label: 'Comprobantes y comisiones', icon: BadgeDollarSign },
       { key: 'publicaciones-productos', label: 'Publicaciones', icon: Megaphone },
       { key: 'ordenes', label: 'Órdenes de trabajo', icon: Wrench },
       { key: 'crm', label: 'CRM', icon: Building2 },

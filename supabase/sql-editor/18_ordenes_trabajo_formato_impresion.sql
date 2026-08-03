@@ -1,3 +1,12 @@
+alter table public.ordenes_trabajo
+  add column if not exists cotizacion_documento_id bigint references public.cotizacion_documentos(id) on delete set null,
+  add column if not exists nota_tecnica text,
+  add column if not exists cliente_snapshot jsonb not null default '{}'::jsonb,
+  add column if not exists items jsonb not null default '[]'::jsonb;
+
+create index if not exists idx_ordenes_trabajo_cotizacion_documento
+  on public.ordenes_trabajo(empresa_id, cotizacion_documento_id);
+
 create or replace function public.crear_ot_desde_cotizacion_documento(doc_id bigint)
 returns public.ordenes_trabajo
 language sql
@@ -67,10 +76,23 @@ as '
     returning *
   ),
   existente as (
-    select ot.*
-    from public.ordenes_trabajo ot
-    join preparada on preparada.empresa_id = ot.empresa_id
-      and preparada.folio_ot = ot.folio
+    update public.ordenes_trabajo ot
+    set cotizacion_documento_id = coalesce(ot.cotizacion_documento_id, preparada.id),
+        cliente_snapshot = case when ot.cliente_snapshot = ''{}''::jsonb then jsonb_build_object(
+          ''razon_social'', coalesce(preparada.cliente_nombre, ''''),
+          ''rut'', coalesce(preparada.cliente_rut, ''''),
+          ''direccion'', coalesce(preparada.cliente_direccion, ''''),
+          ''ciudad'', trim(both '' / '' from concat_ws('' / '', nullif(preparada.cliente_comuna, ''''), nullif(preparada.cliente_ciudad, ''''))),
+          ''telefono'', coalesce(preparada.cliente_telefono, ''''),
+          ''email'', coalesce(preparada.cliente_email, '''')
+        ) else ot.cliente_snapshot end,
+        items = case when ot.items = ''[]''::jsonb then coalesce(preparada.items, ''[]''::jsonb) else ot.items end,
+        nota_tecnica = coalesce(ot.nota_tecnica, nullif(trim(coalesce(preparada.observaciones, preparada.referencia, '''')), '''')),
+        updated_at = now()
+    from preparada
+    where ot.empresa_id = preparada.empresa_id
+      and ot.folio = preparada.folio_ot
+    returning ot.*
   )
   select *
   from creada

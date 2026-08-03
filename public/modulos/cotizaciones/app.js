@@ -17,7 +17,16 @@ const DEFAULT_BRAND = {
   firmaTelefono: '',
   firmaCelular: '',
   condicionesDefault: '',
-  observacionesDefault: ''
+  observacionesDefault: '',
+  transferenciaBanco: 'Banco de Chile',
+  transferenciaRut: '76.171.450-3',
+  transferenciaTipoCuenta: 'Cuenta corriente',
+  transferenciaNumeroCuenta: '9010944505',
+  transferenciaEmailFallback: 'francodareck@tecnicahidraulica.cl',
+  transferenciaAsuntoTemplate: 'Pago {{folio}} - {{vendedor}}',
+  comisionArriendoMensual: 35000,
+  comisionTrabajoHidraulicoPct: 6,
+  comisionVentaApilador: 600000
 };
 let brand = {...DEFAULT_BRAND};
 const CLP = new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0});
@@ -82,10 +91,15 @@ const defaultDoc = {
   presupuestoOrigenNumero:'',
   preNumero:'',
   numero:'',
+  serieCotizacion:'TH',
+  origenDocumento:'sistema',
+  importacionArchivo:'',
   numeroReservado:false,
   fecha:today,
   vcto:'',
   moneda:'CLP',
+  clienteId:null,
+  contactoId:null,
   rutEmpresa:'',
   cliente:'',
   contacto:'',
@@ -96,6 +110,9 @@ const defaultDoc = {
   telefono:'',
   ciudad:'',
   email:'',
+  vendedorNombre:'',
+  vendedorEmail:'',
+  asuntoTransferencia:'',
   referencia:'',
   referencias:[{texto:'', items:[{codigo:'', descripcion:'', cantidad:1, um:'UN', precio:0, dscto:0}]}],
   preOrden:{
@@ -124,6 +141,8 @@ let state = loadCurrent();
 let saved = JSON.parse(localStorage.getItem('th_saved')||'[]');
 let previewMode = 'actual';
 let workflowMode = INITIAL_MODE;
+let availableClients = [];
+let activeCompanyId = '';
 
 function loadCurrent(){
   let autosave = null;
@@ -213,7 +232,7 @@ async function loadBranding(){
 
     const { data: empresa, error } = await supabaseClient
       .from('empresas')
-      .select('nombre, razon_social, rut, email, telefono, direccion, website, logo_url, descripcion_corta, firma_nombre, firma_cargo, firma_email, firma_telefono, firma_celular, condiciones_default, observaciones_default')
+      .select('nombre, razon_social, rut, email, telefono, direccion, website, logo_url, descripcion_corta, firma_nombre, firma_cargo, firma_email, firma_telefono, firma_celular, condiciones_default, observaciones_default, transferencia_banco, transferencia_rut, transferencia_tipo_cuenta, transferencia_numero_cuenta, transferencia_email_fallback, transferencia_asunto_template, comision_arriendo_mensual, comision_trabajo_hidraulico_pct, comision_venta_apilador')
       .eq('id', empresaId)
       .single();
 
@@ -237,8 +256,47 @@ async function loadBranding(){
       firmaTelefono: userMetadata.erp_fono || empresa.firma_telefono || '',
       firmaCelular: userMetadata.erp_celular || empresa.firma_celular || '',
       condicionesDefault: empresa.condiciones_default || '',
-      observacionesDefault: empresa.observaciones_default || ''
+      observacionesDefault: empresa.observaciones_default || '',
+      transferenciaBanco: empresa.transferencia_banco || DEFAULT_BRAND.transferenciaBanco,
+      transferenciaRut: empresa.transferencia_rut || empresa.rut || DEFAULT_BRAND.transferenciaRut,
+      transferenciaTipoCuenta: empresa.transferencia_tipo_cuenta || DEFAULT_BRAND.transferenciaTipoCuenta,
+      transferenciaNumeroCuenta: empresa.transferencia_numero_cuenta || DEFAULT_BRAND.transferenciaNumeroCuenta,
+      transferenciaEmailFallback: empresa.transferencia_email_fallback || DEFAULT_BRAND.transferenciaEmailFallback,
+      transferenciaAsuntoTemplate: empresa.transferencia_asunto_template || DEFAULT_BRAND.transferenciaAsuntoTemplate,
+      comisionArriendoMensual: Number(empresa.comision_arriendo_mensual || 0),
+      comisionTrabajoHidraulicoPct: Number(empresa.comision_trabajo_hidraulico_pct || 0),
+      comisionVentaApilador: Number(empresa.comision_venta_apilador || 0)
     };
+
+    const { data: sellerProfile } = await supabaseClient
+      .from('personas')
+      .select('nombre, email, cargo, configuracion_extra')
+      .eq('empresa_id', empresaId)
+      .eq('usuario_id', user?.id || '')
+      .maybeSingle();
+    const sellerExtra = sellerProfile?.configuracion_extra || {};
+    const sellerCommercial = sellerExtra.comercial || {};
+    brand = {
+      ...brand,
+      firmaNombre: sellerProfile?.nombre || brand.firmaNombre,
+      firmaCargo: sellerProfile?.cargo || brand.firmaCargo,
+      firmaEmail: sellerProfile?.email || brand.firmaEmail,
+      transferenciaBanco: sellerCommercial.transferencia_banco || brand.transferenciaBanco,
+      transferenciaRut: sellerCommercial.transferencia_rut || brand.transferenciaRut,
+      transferenciaTipoCuenta: sellerCommercial.transferencia_tipo_cuenta || brand.transferenciaTipoCuenta,
+      transferenciaNumeroCuenta: sellerCommercial.transferencia_numero_cuenta || brand.transferenciaNumeroCuenta,
+      transferenciaEmailFallback: sellerCommercial.transferencia_email_fallback || brand.transferenciaEmailFallback,
+      transferenciaAsuntoTemplate: sellerCommercial.transferencia_asunto_template || brand.transferenciaAsuntoTemplate,
+      comisionArriendoMensual: Number(sellerCommercial.comision_arriendo_mensual ?? brand.comisionArriendoMensual),
+      comisionTrabajoHidraulicoPct: Number(sellerCommercial.comision_trabajo_hidraulico_pct ?? brand.comisionTrabajoHidraulicoPct),
+      comisionVentaApilador: Number(sellerCommercial.comision_venta_apilador ?? brand.comisionVentaApilador)
+    };
+
+    activeCompanyId = empresaId;
+    state.vendedorNombre = state.vendedorNombre || brand.firmaNombre || userMetadata.erp_nombre || user?.email || '';
+    state.vendedorEmail = state.vendedorEmail || brand.firmaEmail || brand.transferenciaEmailFallback;
+    state.asuntoTransferencia = state.asuntoTransferencia || transferSubject(state);
+    await loadRegisteredClients(empresaId);
 
     applyBrandToDoc(state);
   } catch (err) {
@@ -248,9 +306,27 @@ async function loadBranding(){
   }
 }
 
+async function loadRegisteredClients(empresaId=activeCompanyId){
+  if (!supabaseClient || !empresaId) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from('clientes')
+      .select('id, razon_social, nombre_fantasia, rut, giro, email, telefono, direccion, comuna, ciudad, region, estado, contactos(id, nombre, cargo, email, telefono, principal)')
+      .eq('empresa_id', empresaId)
+      .order('razon_social');
+    if (error) throw error;
+    availableClients = (data || []).filter(client=>client.estado !== 'inactivo');
+  } catch (err) {
+    console.error(err);
+    availableClients = [];
+    saveStatus = {type:'warn', text:'No se pudo cargar la agenda de clientes. Puedes completar los datos manualmente.'};
+  }
+}
+
 function money(v){
   return moneyFor(state, v);
 }
+function clpMoney(v){return CLP.format(Math.round(finiteNumber(v))).replace(/^CLP\s?/, '').trim()}
 function currentCurrency(doc=state){
   const currency = String(doc?.moneda || 'CLP').toUpperCase();
   return ['CLP','UF','USD'].includes(currency) ? currency : 'CLP';
@@ -258,6 +334,8 @@ function currentCurrency(doc=state){
 function finiteNumber(value, fallback=0){const number=Number(value); return Number.isFinite(number) ? number : fallback}
 function validFolio(value){const number=Number(value); return Number.isSafeInteger(number) && number >= BASE_LAST_COTIZACION + 1 && number <= 9999999}
 function normalizedFolio(value){return validFolio(value) ? Number(value) : null}
+function normalizedImportedFolio(value){const number=Number(value); return Number.isSafeInteger(number) && number > 0 && number <= 999999999 ? number : null}
+function normalizedDocumentFolio(doc=state){return doc?.origenDocumento === 'importado' ? normalizedImportedFolio(doc.numero) : normalizedFolio(doc.numero)}
 function moneyFor(doc, v){
   const n = finiteNumber(v);
   const currency = currentCurrency(doc);
@@ -326,6 +404,11 @@ function isQuoteDoc(doc=state){return doc?.documentKind === 'cotizacion' || Bool
 function documentKindOf(doc){return isQuoteDoc(doc) ? 'cotizacion' : 'presupuesto'}
 function budgetDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'presupuesto')}
 function quoteDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'cotizacion')}
+function quoteIdentifier(doc, id){
+  const series = doc?.serieCotizacion || 'TH';
+  const date = doc?.fecha || 'sin fecha';
+  return `COTIZACIÓN N° ${doc?.numero || 'SIN N°'} · ${series} · ${date}${id ? ` · ID ${id}` : ''}`;
+}
 function markDirty(){state.dirty=true; state.savedAt=null; state.savedInSupabase=false; actionMessage=''; saveStatus={type:'warn', text:`Hay cambios sin guardar. Guarda ${isQuoteDoc() ? 'la cotización' : 'el presupuesto'} antes de imprimir.`};}
 function setSilent(k,v){state[k]=v; markDirty(); persist()}
 function syncReferenciaText(){state.referencia=(state.referencias||[]).map(ref=>ref.texto).filter(Boolean).join('\n'); state.items=allItems()}
@@ -359,6 +442,48 @@ function setPreviewMode(mode){previewMode=mode; render()}
 function setRutSilent(v){state.rut=formatRut(v); markDirty(); persist()}
 function setPhoneSilent(v){state.telefono=formatPhone(v); markDirty(); persist()}
 function setRegionSilent(v){state.ciudad=v; if (!getComunas(v).includes(state.comuna)) state.comuna=''; markDirty(); persist(); render({preserveScroll:true})}
+function clientDisplayName(client){return client?.razon_social || client?.nombre_fantasia || 'Cliente sin nombre'}
+function registeredClient(id){return availableClients.find(client=>String(client.id)===String(id)) || null}
+function clientContacts(client=registeredClient(state.clienteId)){return Array.isArray(client?.contactos) ? client.contactos : []}
+function selectRegisteredClient(value){
+  if (!value || value === 'manual') {
+    state.clienteId = null;
+    state.contactoId = null;
+    markDirty();
+    persist();
+    render({preserveScroll:true});
+    return;
+  }
+  const client = registeredClient(value);
+  if (!client) return;
+  const contacts = clientContacts(client);
+  const contact = contacts.find(item=>item.principal) || contacts[0] || null;
+  state.clienteId = client.id;
+  state.contactoId = contact?.id || null;
+  state.cliente = clientDisplayName(client);
+  state.contacto = contact?.nombre || '';
+  state.rut = formatRut(client.rut || '');
+  state.direccion = client.direccion || '';
+  state.giro = client.giro || '';
+  state.comuna = client.comuna || '';
+  state.telefono = formatPhone(contact?.telefono || client.telefono || '');
+  state.ciudad = client.region || client.ciudad || '';
+  state.email = contact?.email || client.email || '';
+  markDirty();
+  persist();
+  render({preserveScroll:true});
+}
+function selectRegisteredContact(value){
+  const contact = clientContacts().find(item=>String(item.id)===String(value));
+  if (!contact) return;
+  state.contactoId = contact.id;
+  state.contacto = contact.nombre || '';
+  state.telefono = formatPhone(contact.telefono || state.telefono || '');
+  state.email = contact.email || state.email || '';
+  markDirty();
+  persist();
+  render({preserveScroll:true});
+}
 function addItem(){addRefItem(0)}
 function delItem(i){delRefItem(0,i)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -410,6 +535,16 @@ function brandName(){return brand.razonSocial || brand.nombre || DEFAULT_BRAND.r
 function brandLogo(){return brand.logoUrl || DEFAULT_BRAND.logoUrl}
 function brandDescription(){return brand.descripcion || DEFAULT_BRAND.descripcion}
 function brandAddressLine(){return brand.direccion || DEFAULT_BRAND.direccion}
+function sellerName(doc=state){return doc.vendedorNombre || brand.firmaNombre || brandName()}
+function sellerEmail(doc=state){return doc.vendedorEmail || brand.firmaEmail || brand.transferenciaEmailFallback || brandEmail()}
+function documentFolio(doc=state){return doc.numero || doc.preNumero || 'pendiente'}
+function transferSubject(doc=state){
+  const template = brand.transferenciaAsuntoTemplate || DEFAULT_BRAND.transferenciaAsuntoTemplate;
+  return template
+    .replace(/\{\{folio\}\}/gi, documentFolio(doc))
+    .replace(/\{\{vendedor\}\}/gi, sellerName(doc))
+    .replace(/\{\{email\}\}/gi, sellerEmail(doc));
+}
 function brandContactLine(){
   const parts = [];
   if (brandPhone()) parts.push(`<b>Teléfono:</b> ${esc(brandPhone())}`);
@@ -486,7 +621,7 @@ function renderCotizacionSheet(t, docLabel, displayNumber){
         </table>
       </div>
 
-      <div class="bank">Datos para Orden de Compra<br>Razón Social: ${esc(brandName())} RUT: ${esc(brandRut())}<br>E-mail: ${esc(brandEmail())}</div>
+      <div class="bank"><b>DATOS DE TRANSFERENCIA</b><br>Titular: ${esc(brandName())} · RUT: ${esc(brand.transferenciaRut || brandRut())}<br>${esc(brand.transferenciaBanco)} · ${esc(brand.transferenciaTipoCuenta)} N° ${esc(brand.transferenciaNumeroCuenta)}<br>E-mail: ${esc(sellerEmail(state))}<br>Asunto: ${esc(transferSubject(state))}</div>
     </article>`;
 }
 
@@ -599,6 +734,7 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
         <span>Fono: ${esc(brand.firmaTelefono || brandPhone())}</span><br>
         <span>Cel.: ${esc(brand.firmaCelular || '')}</span>
       </section>
+      <div class="bank"><b>DATOS DE TRANSFERENCIA</b><br>Titular: ${esc(brandName())} · RUT: ${esc(brand.transferenciaRut || brandRut())}<br>${esc(brand.transferenciaBanco)} · ${esc(brand.transferenciaTipoCuenta)} N° ${esc(brand.transferenciaNumeroCuenta)}<br>E-mail: ${esc(sellerEmail(doc))}<br>Asunto: ${esc(transferSubject(doc))}</div>
     </article>`;
 }
 
@@ -699,8 +835,11 @@ async function reserveNextNumber({force=false}={}){
 function buildDbPayload(){
   const quoteDoc = isQuoteDoc();
   const t = quoteDoc ? totals() : totalsPreOrden();
-  const numero = quoteDoc ? normalizedFolio(state.numero) : null;
+  const numero = quoteDoc ? normalizedDocumentFolio(state) : null;
   if (quoteDoc && numero === null) throw new Error('La cotización no tiene un folio entero válido. Intenta guardarla nuevamente para reservar otro número.');
+  state.vendedorNombre = sellerName(state);
+  state.vendedorEmail = sellerEmail(state);
+  state.asuntoTransferencia = transferSubject(state);
   const documentData = {
     ...state,
     numero: numero === null ? '' : String(numero),
@@ -713,8 +852,13 @@ function buildDbPayload(){
     estado: quoteDoc ? (state.numeroReservado ? 'cotizacion_emitida' : 'cotizacion_borrador') : 'pre_cotizacion',
     pre_numero: quoteDoc ? null : (state.preNumero || null),
     numero,
+    serie_cotizacion: state.serieCotizacion || 'TH',
+    origen_documento: state.origenDocumento || 'sistema',
+    importacion_archivo: state.importacionArchivo || null,
     fecha_emision: state.fecha || null,
     fecha_vcto: state.vcto || null,
+    cliente_id: state.clienteId || null,
+    contacto_id: state.contactoId || null,
     rut_empresa: state.rutEmpresa || brandRut(),
     cliente_nombre: state.cliente || '',
     cliente_contacto: state.contacto || '',
@@ -725,6 +869,9 @@ function buildDbPayload(){
     cliente_telefono: state.telefono || '',
     cliente_ciudad: state.ciudad || '',
     cliente_email: state.email || '',
+    vendedor_nombre: state.vendedorNombre,
+    vendedor_email: state.vendedorEmail,
+    asunto_transferencia: state.asuntoTransferencia,
     referencia: referenciasTexto(),
     observaciones: state.observaciones || '',
     garantia: state.garantia || '',
@@ -741,7 +888,8 @@ function buildDbPayload(){
 
 function docFromDb(row){
   const d = row.data || {};
-  const savedFolio = normalizedFolio(row.numero ?? d.numero);
+  const origin = row.origen_documento || d.origenDocumento || 'sistema';
+  const savedFolio = origin === 'importado' ? normalizedImportedFolio(row.numero ?? d.numero) : normalizedFolio(row.numero ?? d.numero);
   const documentKind = d.documentKind || (savedFolio !== null ? 'cotizacion' : 'presupuesto');
   const doc = {
     ...defaultDoc,
@@ -756,9 +904,14 @@ function docFromDb(row){
     preNumero: row.pre_numero || d.preNumero || '',
     numero: savedFolio === null ? '' : String(savedFolio),
     numeroReservado: savedFolio !== null,
+    serieCotizacion: row.serie_cotizacion || d.serieCotizacion || 'TH',
+    origenDocumento: origin,
+    importacionArchivo: row.importacion_archivo || d.importedFrom || '',
     fecha: row.fecha_emision || d.fecha || today,
     vcto: row.fecha_vcto || d.vcto || '',
     moneda: d.moneda || 'CLP',
+    clienteId: row.cliente_id || d.clienteId || null,
+    contactoId: row.contacto_id || d.contactoId || null,
     rutEmpresa: row.rut_empresa === LEGACY_TH_RUT && !brandRut() ? '' : (row.rut_empresa || d.rutEmpresa || brandRut()),
     cliente: row.cliente_nombre || d.cliente || '',
     contacto: row.cliente_contacto || d.contacto || '',
@@ -769,6 +922,9 @@ function docFromDb(row){
     telefono: row.cliente_telefono || d.telefono || '',
     ciudad: row.cliente_ciudad || d.ciudad || '',
     email: row.cliente_email || d.email || '',
+    vendedorNombre: row.vendedor_nombre || d.vendedorNombre || '',
+    vendedorEmail: row.vendedor_email || d.vendedorEmail || '',
+    asuntoTransferencia: row.asunto_transferencia || d.asuntoTransferencia || '',
     referencia: row.referencia || d.referencia || '',
     referencias: Array.isArray(d.referencias) ? d.referencias : ((row.referencia || d.referencia) ? String(row.referencia || d.referencia).split('\n') : ['']),
     observaciones: row.observaciones || d.observaciones || '',
@@ -818,11 +974,14 @@ async function newDoc(kind=workflowMode){
     preNumero:'',
     numero:'',
     numeroReservado:false,
+    serieCotizacion:'TH', origenDocumento:'sistema', importacionArchivo:'',
     fecha:today,
     vcto:'',
     moneda:'CLP',
     rutEmpresa: brandRut(),
+    clienteId:null, contactoId:null,
     cliente:'', contacto:'', rut:'', direccion:'', giro:'', comuna:'', telefono:'', ciudad:'', email:'',
+    vendedorNombre:brand.firmaNombre || '', vendedorEmail:brand.firmaEmail || brand.transferenciaEmailFallback || '', asuntoTransferencia:'',
     referencia:'', referencias:[{texto:'', items:[blankItem()]}], garantia:'30 días', condiciones:brand.condicionesDefault || '',
     preOrden:{servicio:'', caracteristicas:PRE_SPEC_LABELS.map(nombre=>({nombre, valor:''})), datosOperativos:[], cargos:[blankCargo()]},
     observaciones: brand.observacionesDefault || EJEMPLO_NOTAS,
@@ -897,6 +1056,20 @@ async function selectBudgetForQuote(value){
   if (value) createQuoteFromBudget(value);
 }
 
+function showValidationError(text, selector){
+  saveStatus = { type:'bad', text };
+  actionMessage = '';
+  render({preserveScroll:true});
+  requestAnimationFrame(() => {
+    const field = selector ? document.querySelector(selector) : null;
+    if (!field) return;
+    field.classList.add('validation-error');
+    field.scrollIntoView({behavior:'smooth', block:'center'});
+    field.focus({preventScroll:true});
+    window.setTimeout(() => field.classList.remove('validation-error'), 2400);
+  });
+}
+
 async function saveDoc(){
   if (savingDoc) return;
   const clientName = String(state.cliente || '').trim();
@@ -905,21 +1078,15 @@ async function saveDoc(){
   const pricedItems = completedItems.filter(item => Number(item.cantidad) > 0 && Number(item.precio) > 0);
 
   if (!clientName) {
-    saveStatus = { type:'bad', text:`Ingresa el cliente antes de guardar ${isQuoteDoc() ? 'la cotización' : 'el presupuesto'}.` };
-    actionMessage = '';
-    render({preserveScroll:true});
+    showValidationError(`Ingresa el cliente antes de guardar ${isQuoteDoc() ? 'la cotización' : 'el presupuesto'}.`, '.client-name-input');
     return;
   }
   if (!completedItems.length) {
-    saveStatus = { type:'bad', text:'Agrega al menos un ítem con descripción antes de guardar.' };
-    actionMessage = '';
-    render({preserveScroll:true});
+    showValidationError('Agrega al menos un ítem con descripción antes de guardar.', '.item-description-input');
     return;
   }
   if (!pricedItems.length) {
-    saveStatus = { type:'bad', text:'Completa una cantidad y un precio mayor que cero en al menos un ítem.' };
-    actionMessage = '';
-    render({preserveScroll:true});
+    showValidationError('Completa una cantidad y un precio mayor que cero en al menos un ítem.', '.item-price-input');
     return;
   }
   savingDoc = true;
@@ -1096,7 +1263,12 @@ function render(renderOptions={}){
       </div>
 
       <div class="section-title">${isFinal ? 'Cliente cotización final' : 'Cliente presupuesto'}</div>
-      <div class="field"><label>Señor(es)</label><input value="${esc(state.cliente)}" oninput="setSilent('cliente',this.value)" onchange="render({preserveScroll:true})" placeholder="Cliente"></div>
+      <div class="registered-client-box">
+        <div class="field"><label>Usar cliente registrado</label><select onchange="selectRegisteredClient(this.value)"><option value="manual" ${!state.clienteId ? 'selected' : ''}>Ingreso manual / cliente nuevo</option>${availableClients.map(client=>`<option value="${esc(client.id)}" ${String(state.clienteId)===String(client.id)?'selected':''}>${esc(clientDisplayName(client))}${client.rut ? ` · ${esc(client.rut)}` : ''}</option>`).join('')}</select></div>
+        ${state.clienteId && clientContacts().length ? `<div class="field"><label>Contacto registrado</label><select onchange="selectRegisteredContact(this.value)">${clientContacts().map(contact=>`<option value="${esc(contact.id)}" ${String(state.contactoId)===String(contact.id)?'selected':''}>${esc(contact.nombre)}${contact.cargo ? ` · ${esc(contact.cargo)}` : ''}</option>`).join('')}</select></div>` : ''}
+        <p class="small">Al elegir un cliente se completan automáticamente razón social, RUT, dirección, contacto, teléfono y correo. Puedes ajustarlos solo para este documento.</p>
+      </div>
+      <div class="field"><label>Señor(es) *</label><input class="client-name-input" aria-required="true" value="${esc(state.cliente)}" oninput="setSilent('cliente',this.value)" onchange="render({preserveScroll:true})" placeholder="Cliente"></div>
       <div class="grid">
         <div class="field"><label>Contacto</label><input value="${esc(state.contacto)}" oninput="setSilent('contacto',this.value)" onchange="render({preserveScroll:true})" placeholder="Sandra Nuñez"></div>
         <div class="field"><label>RUT cliente</label><input inputmode="text" autocomplete="off" value="${esc(state.rut)}" oninput="this.value=formatRut(this.value);setRutSilent(this.value)" onchange="render({preserveScroll:true})" placeholder="12.345.678-9"></div>
@@ -1108,6 +1280,17 @@ function render(renderOptions={}){
           <div class="field"><label>Región</label><select onchange="setRegionSilent(this.value)">${options(REGIONES_COMUNAS.map(r=>r.region), state.ciudad, 'Selecciona región')}</select></div>
           <div class="field"><label>Comuna</label><select ${state.ciudad ? '' : 'disabled'} onchange="setSilent('comuna',this.value);render({preserveScroll:true})">${options(getComunas(state.ciudad), state.comuna, state.ciudad ? 'Selecciona comuna' : 'Primero selecciona región')}</select></div>
         ` : ''}
+      </div>
+
+      <div class="seller-info-box">
+        <div class="seller-info-title">Información interna para vendedores</div>
+        <div class="seller-rules">
+          <span><b>${clpMoney(brand.comisionArriendoMensual)}</b> por mes de arriendo</span>
+          <span><b>${esc(brand.comisionTrabajoHidraulicoPct)}%</b> de la ganancia por trabajo hidráulico</span>
+          <span><b>${clpMoney(brand.comisionVentaApilador)}</b> por venta de apilador</span>
+        </div>
+        <div class="seller-transfer"><b>Transferencia:</b> ${esc(brandName())} · ${esc(brand.transferenciaBanco)} · ${esc(brand.transferenciaTipoCuenta)} N° ${esc(brand.transferenciaNumeroCuenta)} · RUT ${esc(brand.transferenciaRut || brandRut())}<br><b>Correo:</b> ${esc(sellerEmail(state))}<br><b>Asunto:</b> ${esc(transferSubject(state))}</div>
+        <p class="small">Esta tarjeta es interna. Las comisiones no aparecen en el PDF del cliente.</p>
       </div>
 
       ${!isFinal ? `
@@ -1149,10 +1332,10 @@ function render(renderOptions={}){
             <div class="item-row">
               <div class="grid">
                 ${isFinal ? `<div class="field"><label>Código</label><input value="${esc(it.codigo)}" oninput="setRefItemSilent(${r},${i},'codigo',this.value)" onchange="render({preserveScroll:true})" placeholder="ETV 214"></div>` : ''}
-                <div class="field item-description-field"><label>Descripción</label><textarea class="item-description-input" placeholder="Arriendo mensual apilador eléctrico ETV 214" oninput="setRefItemSilent(${r},${i},'descripcion',this.value)" onchange="render({preserveScroll:true})">${esc(it.descripcion)}</textarea></div>
-                <div class="field"><label>Cantidad</label><input type="number" value="${esc(it.cantidad)}" oninput="setRefItemSilent(${r},${i},'cantidad',this.value)" onchange="render({preserveScroll:true})"></div>
+                <div class="field item-description-field"><label>Descripción *</label><textarea class="item-description-input" aria-required="true" placeholder="Arriendo mensual apilador eléctrico ETV 214" oninput="setRefItemSilent(${r},${i},'descripcion',this.value)" onchange="render({preserveScroll:true})">${esc(it.descripcion)}</textarea></div>
+                <div class="field"><label>Cantidad *</label><input class="item-quantity-input" aria-required="true" type="number" value="${esc(it.cantidad)}" oninput="setRefItemSilent(${r},${i},'cantidad',this.value)" onchange="render({preserveScroll:true})"></div>
                 ${isFinal ? `<div class="field"><label>U.M.</label><input value="${esc(it.um)}" oninput="setRefItemSilent(${r},${i},'um',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
-                <div class="field"><label>Precio ${currentCurrency(state)}</label><input type="number" step="0.01" value="${esc(it.precio)}" oninput="setRefItemSilent(${r},${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${pricePlaceholder(state)}"></div>
+                <div class="field"><label>Precio ${currentCurrency(state)} *</label><input class="item-price-input" aria-required="true" type="number" step="0.01" value="${esc(it.precio)}" oninput="setRefItemSilent(${r},${i},'precio',this.value)" onchange="render({preserveScroll:true})" placeholder="${pricePlaceholder(state)}"></div>
                 ${isFinal ? `<div class="field"><label>Dscto %</label><input type="number" value="${esc(it.dscto)}" oninput="setRefItemSilent(${r},${i},'dscto',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
                 <div class="field"><label>Subtotal</label><input readonly value="${money(subtotalItem(it))}"></div>
                 <button class="danger" onclick="delRefItem(${r},${i})">Eliminar ítem</button>
@@ -1167,6 +1350,7 @@ function render(renderOptions={}){
       <div class="field"><label>${isFinal ? 'Garantía' : 'Garantía / validez'}</label><input value="${esc(state.garantia)}" oninput="setSilent('garantia',this.value)" onchange="render({preserveScroll:true})" placeholder="15 días"></div>
       <div class="field"><label>${isFinal ? 'Condiciones comerciales' : 'Condiciones / forma de pago'}</label><textarea placeholder="30 días" oninput="setSilent('condiciones',this.value)" onchange="render({preserveScroll:true})">${esc(state.condiciones||'')}</textarea></div>
 
+      ${saveStatus.type === 'bad' ? `<div class="validation-feedback" role="alert"><b>No se pudo guardar.</b><span>${esc(saveStatus.text)}</span></div>` : ''}
       <div class="btns sticky-actions">
         <button class="green" onclick="window.print()" ${exportDisabled ? `disabled title="${esc(exportTitle)}"` : ''}>${esc(printTitle)}</button>
         <button class="yellow" onclick="saveDoc()" ${savingDoc?'disabled':''}>${savingDoc ? 'Guardando...' : (state.savedAt && !state.dirty ? 'Guardar cambios' : (isFinal ? 'Guardar cotización' : 'Guardar presupuesto'))}</button>
@@ -1175,7 +1359,7 @@ function render(renderOptions={}){
       </div>
 
       <div class="section-title">${isFinal ? 'Cotizaciones guardadas' : 'Presupuestos guardados'}</div>
-      <div class="saved-list">${visibleSaved.map(s=>`<div class="saved"><b>${esc(isQuoteDoc(s.doc) ? 'COTIZACIÓN N° ' + (s.doc.numero || 'SIN N°') : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente || 'Sin cliente')} · ${esc(s.doc.savedAt||'')}</span>${isQuoteDoc(s.doc) ? `<span class="saved-origin">${s.doc.correspondePresupuesto ? `Presupuesto: ${esc(s.doc.presupuestoOrigenNumero || 'vinculado')}` : 'Sin presupuesto asociado'}</span>` : ''}<div class="btns"><button class="ghost" onclick="loadDoc('${s.id}')">Abrir</button><button class="danger" onclick="deleteSaved('${s.id}')">Borrar</button></div></div>`).join('')||`<p class="small">Aún no hay ${isFinal ? 'cotizaciones' : 'presupuestos'} guardados.</p>`}</div>
+      <div class="saved-list">${visibleSaved.map(s=>`<div class="saved"><b>${esc(isQuoteDoc(s.doc) ? quoteIdentifier(s.doc, s.id) : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente || 'Sin cliente')} · ${esc(s.doc.savedAt||'')}</span>${isQuoteDoc(s.doc) ? `<span class="saved-origin">${s.doc.origenDocumento === 'importado' ? `Importada${s.doc.importacionArchivo ? ` desde ${esc(s.doc.importacionArchivo)}` : ''}` : s.doc.correspondePresupuesto ? `Presupuesto: ${esc(s.doc.presupuestoOrigenNumero || 'vinculado')}` : 'Sin presupuesto asociado'}</span>` : ''}<div class="btns"><button class="ghost" onclick="loadDoc('${s.id}')">Abrir</button><button class="danger" onclick="deleteSaved('${s.id}')">Borrar</button></div></div>`).join('')||`<p class="small">Aún no hay ${isFinal ? 'cotizaciones' : 'presupuestos'} guardados.</p>`}</div>
     </aside>
 
     <section class="preview-wrap">

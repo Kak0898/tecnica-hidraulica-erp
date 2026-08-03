@@ -504,6 +504,10 @@ create table if not exists public.cotizacion_documentos (
   estado text not null default 'pre_cotizacion',
   pre_numero text,
   numero bigint,
+  serie_cotizacion text not null default 'TH',
+  origen_documento text not null default 'sistema' check (origen_documento in ('sistema', 'importado')),
+  importacion_uid text,
+  importacion_archivo text,
   fecha_emision date,
   fecha_vcto date,
   rut_empresa text,
@@ -530,7 +534,6 @@ create table if not exists public.cotizacion_documentos (
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (empresa_id, numero),
   unique (empresa_id, pre_numero)
 );
 
@@ -782,6 +785,7 @@ create table if not exists public.ordenes_trabajo (
   contacto_id uuid references public.contactos(id) on delete set null,
   equipo_id uuid references public.machines(id) on delete set null,
   cotizacion_id uuid references public.cotizaciones(id) on delete set null,
+  cotizacion_documento_id bigint references public.cotizacion_documentos(id) on delete set null,
   folio text not null,
   titulo text,
   estado text not null default 'recibida' check (estado in ('recibida', 'diagnostico', 'esperando_aprobacion', 'en_reparacion', 'pruebas', 'lista', 'entregada', 'cerrada', 'cancelada')),
@@ -789,6 +793,9 @@ create table if not exists public.ordenes_trabajo (
   descripcion_problema text,
   diagnostico text,
   solucion text,
+  nota_tecnica text,
+  cliente_snapshot jsonb not null default '{}'::jsonb,
+  items jsonb not null default '[]'::jsonb,
   responsable_id uuid references auth.users(id),
   fecha_ingreso timestamptz not null default now(),
   fecha_prometida date,
@@ -829,11 +836,15 @@ as '
       contacto_id,
       equipo_id,
       cotizacion_id,
+      cotizacion_documento_id,
       folio,
       titulo,
       estado,
       prioridad,
       descripcion_problema,
+      nota_tecnica,
+      cliente_snapshot,
+      items,
       created_by
     )
     select
@@ -842,11 +853,22 @@ as '
       preparada.contacto_id,
       preparada.equipo_id,
       preparada.cotizacion_id,
+      preparada.id,
       preparada.folio_ot,
       ''Servicio desde cotización '' || coalesce(preparada.numero::text, preparada.pre_numero, preparada.id::text),
       ''recibida'',
       ''normal'',
       nullif(trim(coalesce(preparada.referencia, preparada.observaciones, '''')), ''''),
+      nullif(trim(coalesce(preparada.observaciones, preparada.referencia, '''')), ''''),
+      jsonb_build_object(
+        ''razon_social'', coalesce(preparada.cliente_nombre, ''''),
+        ''rut'', coalesce(preparada.cliente_rut, ''''),
+        ''direccion'', coalesce(preparada.cliente_direccion, ''''),
+        ''ciudad'', trim(both '' / '' from concat_ws('' / '', nullif(preparada.cliente_comuna, ''''), nullif(preparada.cliente_ciudad, ''''))),
+        ''telefono'', coalesce(preparada.cliente_telefono, ''''),
+        ''email'', coalesce(preparada.cliente_email, '''')
+      ),
+      coalesce(preparada.items, ''[]''::jsonb),
       auth.uid()
     from preparada
     where not exists (
@@ -1202,7 +1224,10 @@ create index if not exists idx_erp_counters_empresa_key on public.erp_counters(e
 create index if not exists idx_cotizaciones_empresa_estado on public.cotizaciones(empresa_id, estado);
 create index if not exists idx_cotizacion_documentos_empresa_estado on public.cotizacion_documentos(empresa_id, estado);
 create index if not exists idx_cotizacion_documentos_numero on public.cotizacion_documentos(empresa_id, numero);
+create index if not exists idx_cotizacion_documentos_folio_fecha on public.cotizacion_documentos(empresa_id, numero, fecha_emision desc);
+create unique index if not exists uq_cotizacion_documentos_importacion on public.cotizacion_documentos(empresa_id, importacion_uid) where importacion_uid is not null;
 create index if not exists idx_ordenes_empresa_estado on public.ordenes_trabajo(empresa_id, estado);
+create index if not exists idx_ordenes_trabajo_cotizacion_documento on public.ordenes_trabajo(empresa_id, cotizacion_documento_id);
 create index if not exists idx_eventos_equipo_created on public.equipo_eventos(equipo_id, created_at desc);
 create index if not exists idx_archivos_entidad on public.archivos(entidad_tipo, entidad_id);
 create index if not exists idx_personas_empresa_tipo on public.personas(empresa_id, tipo_relacion);

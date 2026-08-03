@@ -13,6 +13,7 @@ export type PersonaRrhh = {
   telefono?: string | null
   direccion?: string | null
   cargo?: string | null
+  rol_trabajador?: 'general' | 'vendedor' | 'tecnico' | 'administrativo' | 'supervisor' | 'jefatura'
   centro_costo?: string | null
   activo: boolean
   codigo_empleado?: string | null
@@ -36,6 +37,7 @@ export type PersonaRrhh = {
   salud_tipo?: string | null
   salud_institucion?: string | null
   usuario_id?: string | null
+  configuracion_extra?: Record<string, unknown> | null
 }
 
 export type RrhhAlert = {

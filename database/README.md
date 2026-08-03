@@ -56,3 +56,25 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/postgresql.sql
 ```
 
 El SQL integral es destructivo para las tablas del ERP y debe utilizarse sobre una base vacía. Para una instalación con datos se deben preparar migraciones incrementales.
+
+## Actualizar una instalación con datos
+
+Las migraciones incrementales no borran cotizaciones, personas ni comprobantes. Para habilitar reglas personales de vendedores, recálculo e importación de cotizaciones con folios repetidos:
+
+```bash
+cd /var/www/desarrollo/intranet
+npm run db:seed:comisiones-importacion
+```
+
+Este comando elimina únicamente la restricción que obligaba a que el número visible de cotización fuera único. Cada documento continúa identificado de forma segura por su `id`; los importados además utilizan `serie_cotizacion`, fecha e `importacion_uid`.
+
+Para habilitar órdenes de trabajo imprimibles y copiar el contenido técnico desde
+cotizaciones guardadas:
+
+```bash
+cd /var/www/desarrollo/intranet
+npm run db:seed:ordenes-formato
+```
+
+Este comando agrega columnas no destructivas a `ordenes_trabajo` y actualiza la
+función `crear_ot_desde_cotizacion_documento(doc_id)`.

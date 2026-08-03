@@ -592,6 +592,10 @@ create table if not exists public.cotizacion_documentos (
   estado text not null default 'pre_cotizacion',
   pre_numero text,
   numero bigint,
+  serie_cotizacion text not null default 'TH',
+  origen_documento text not null default 'sistema' check (origen_documento in ('sistema', 'importado')),
+  importacion_uid text,
+  importacion_archivo text,
   fecha_emision date,
   fecha_vcto date,
   rut_empresa text,
@@ -618,7 +622,6 @@ create table if not exists public.cotizacion_documentos (
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (empresa_id, numero),
   unique (empresa_id, pre_numero)
 );
 
@@ -870,6 +873,7 @@ create table if not exists public.ordenes_trabajo (
   contacto_id uuid references public.contactos(id) on delete set null,
   equipo_id uuid references public.machines(id) on delete set null,
   cotizacion_id uuid references public.cotizaciones(id) on delete set null,
+  cotizacion_documento_id bigint references public.cotizacion_documentos(id) on delete set null,
   folio text not null,
   titulo text,
   estado text not null default 'recibida' check (estado in ('recibida', 'diagnostico', 'esperando_aprobacion', 'en_reparacion', 'pruebas', 'lista', 'entregada', 'cerrada', 'cancelada')),
@@ -877,6 +881,9 @@ create table if not exists public.ordenes_trabajo (
   descripcion_problema text,
   diagnostico text,
   solucion text,
+  nota_tecnica text,
+  cliente_snapshot jsonb not null default '{}'::jsonb,
+  items jsonb not null default '[]'::jsonb,
   responsable_id uuid references auth.users(id),
   fecha_ingreso timestamptz not null default now(),
   fecha_prometida date,
@@ -917,11 +924,15 @@ as '
       contacto_id,
       equipo_id,
       cotizacion_id,
+      cotizacion_documento_id,
       folio,
       titulo,
       estado,
       prioridad,
       descripcion_problema,
+      nota_tecnica,
+      cliente_snapshot,
+      items,
       created_by
     )
     select
@@ -930,11 +941,22 @@ as '
       preparada.contacto_id,
       preparada.equipo_id,
       preparada.cotizacion_id,
+      preparada.id,
       preparada.folio_ot,
       ''Servicio desde cotización '' || coalesce(preparada.numero::text, preparada.pre_numero, preparada.id::text),
       ''recibida'',
       ''normal'',
       nullif(trim(coalesce(preparada.referencia, preparada.observaciones, '''')), ''''),
+      nullif(trim(coalesce(preparada.observaciones, preparada.referencia, '''')), ''''),
+      jsonb_build_object(
+        ''razon_social'', coalesce(preparada.cliente_nombre, ''''),
+        ''rut'', coalesce(preparada.cliente_rut, ''''),
+        ''direccion'', coalesce(preparada.cliente_direccion, ''''),
+        ''ciudad'', trim(both '' / '' from concat_ws('' / '', nullif(preparada.cliente_comuna, ''''), nullif(preparada.cliente_ciudad, ''''))),
+        ''telefono'', coalesce(preparada.cliente_telefono, ''''),
+        ''email'', coalesce(preparada.cliente_email, '''')
+      ),
+      coalesce(preparada.items, ''[]''::jsonb),
       auth.uid()
     from preparada
     where not exists (
@@ -1290,7 +1312,10 @@ create index if not exists idx_erp_counters_empresa_key on public.erp_counters(e
 create index if not exists idx_cotizaciones_empresa_estado on public.cotizaciones(empresa_id, estado);
 create index if not exists idx_cotizacion_documentos_empresa_estado on public.cotizacion_documentos(empresa_id, estado);
 create index if not exists idx_cotizacion_documentos_numero on public.cotizacion_documentos(empresa_id, numero);
+create index if not exists idx_cotizacion_documentos_folio_fecha on public.cotizacion_documentos(empresa_id, numero, fecha_emision desc);
+create unique index if not exists uq_cotizacion_documentos_importacion on public.cotizacion_documentos(empresa_id, importacion_uid) where importacion_uid is not null;
 create index if not exists idx_ordenes_empresa_estado on public.ordenes_trabajo(empresa_id, estado);
+create index if not exists idx_ordenes_trabajo_cotizacion_documento on public.ordenes_trabajo(empresa_id, cotizacion_documento_id);
 create index if not exists idx_eventos_equipo_created on public.equipo_eventos(equipo_id, created_at desc);
 create index if not exists idx_archivos_entidad on public.archivos(entidad_tipo, entidad_id);
 create index if not exists idx_personas_empresa_tipo on public.personas(empresa_id, tipo_relacion);
@@ -3450,6 +3475,72 @@ create table if not exists public.password_reset_tokens (
 
 create index if not exists idx_password_reset_tokens_user
   on public.password_reset_tokens(user_id, expires_at desc);
+
+-- Datos comerciales y reglas personales de vendedores.
+alter table public.empresas
+  add column if not exists transferencia_banco text,
+  add column if not exists transferencia_rut text,
+  add column if not exists transferencia_tipo_cuenta text,
+  add column if not exists transferencia_numero_cuenta text,
+  add column if not exists transferencia_email_fallback text,
+  add column if not exists transferencia_asunto_template text,
+  add column if not exists comision_arriendo_mensual numeric not null default 0,
+  add column if not exists comision_trabajo_hidraulico_pct numeric(7,4) not null default 0,
+  add column if not exists comision_venta_apilador numeric not null default 0;
+
+alter table public.personas
+  add column if not exists rol_trabajador text not null default 'general';
+alter table public.personas
+  drop constraint if exists personas_rol_trabajador_check;
+alter table public.personas
+  add constraint personas_rol_trabajador_check check (
+    rol_trabajador in ('general', 'vendedor', 'tecnico', 'administrativo', 'supervisor', 'jefatura')
+  );
+
+alter table public.cotizacion_documentos
+  drop constraint if exists cotizacion_documentos_empresa_id_numero_key,
+  add column if not exists vendedor_nombre text,
+  add column if not exists vendedor_email text,
+  add column if not exists asunto_transferencia text,
+  add column if not exists serie_cotizacion text not null default 'TH',
+  add column if not exists origen_documento text not null default 'sistema',
+  add column if not exists importacion_uid text,
+  add column if not exists importacion_archivo text,
+  add column if not exists vendedor_id uuid references public.personas(id) on delete set null;
+
+alter table public.cotizacion_documentos
+  drop constraint if exists cotizacion_documentos_origen_check;
+alter table public.cotizacion_documentos
+  add constraint cotizacion_documentos_origen_check check (origen_documento in ('sistema', 'importado'));
+
+create index if not exists idx_cotizacion_documentos_folio_fecha
+  on public.cotizacion_documentos(empresa_id, numero, fecha_emision desc);
+create unique index if not exists uq_cotizacion_documentos_importacion
+  on public.cotizacion_documentos(empresa_id, importacion_uid)
+  where importacion_uid is not null;
+
+update public.empresas
+set transferencia_banco = coalesce(nullif(transferencia_banco, ''), 'Banco de Chile'),
+    transferencia_rut = coalesce(nullif(transferencia_rut, ''), '76.171.450-3'),
+    transferencia_tipo_cuenta = coalesce(nullif(transferencia_tipo_cuenta, ''), 'Cuenta corriente'),
+    transferencia_numero_cuenta = coalesce(nullif(transferencia_numero_cuenta, ''), '9010944505'),
+    transferencia_email_fallback = coalesce(nullif(transferencia_email_fallback, ''), 'francodareck@tecnicahidraulica.cl'),
+    transferencia_asunto_template = coalesce(nullif(transferencia_asunto_template, ''), 'Pago {{folio}} - {{vendedor}}'),
+    comision_arriendo_mensual = case when comision_arriendo_mensual = 0 then 35000 else comision_arriendo_mensual end,
+    comision_trabajo_hidraulico_pct = case when comision_trabajo_hidraulico_pct = 0 then 6 else comision_trabajo_hidraulico_pct end,
+    comision_venta_apilador = case when comision_venta_apilador = 0 then 600000 else comision_venta_apilador end
+where lower(coalesce(slug, '')) in ('tecnica-hidraulica', 'th', 'tecnica-hidraulica-ltda')
+   or lower(coalesce(nombre, '')) like '%técnica hidráulica%'
+   or lower(coalesce(nombre, '')) like '%tecnica hidraulica%';
+
+update public.personas
+set rol_trabajador = 'vendedor', updated_at = now()
+where lower(nombre) like '%franco%'
+   or coalesce(configuracion_extra ->> 'rol_trabajador', '') = 'vendedor';
+
+update public.personas
+set configuracion_extra = jsonb_set(coalesce(configuracion_extra, '{}'::jsonb), '{rol_trabajador}', to_jsonb(rol_trabajador), true)
+where coalesce(configuracion_extra ->> 'rol_trabajador', '') is distinct from rol_trabajador;
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
