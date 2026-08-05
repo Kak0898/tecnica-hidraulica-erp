@@ -175,6 +175,17 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 @media(max-width:700px){.app{padding:10px}.grid,.item-row .grid,.technical-grid,.spec-row,.fixed-spec-row,.cargo-row,.seller-rules{grid-template-columns:1fr}.panel{padding:14px}.sheet{width:100%;overflow:hidden}.sheet-header,.preorder-header,.preorder-info-grid,.preorder-bottom,.preorder-two-cols,.budget-top-info,.budget-bottom{grid-template-columns:1fr}.preorder-doc{text-align:left}.preorder-mini-grid{margin-left:0}.quote-block{border:1px solid #d7dee9;border-radius:12px;padding:10px}.quote-number{font-size:46px}.quote-number.pre-number{font-size:30px}.budget-header .quote-number.pre-number{font-size:30px}.preorder-number{font-size:30px}.brand-logo{max-width:220px;max-height:78px}.obs-totals{grid-template-columns:1fr}.budget-specs{grid-template-columns:1fr 8px 1fr}}
 @media print{
   @page{size:A4;margin:0}
-  body{background:white}.app{display:block;padding:0}.panel{display:none}.sheet{box-shadow:none;margin:0;width:210mm;min-height:297mm;padding:12mm 12mm;transform:none}.preview-wrap{display:block}.sheet-header{page-break-inside:avoid}.quote-number{font-size:58px}.quote-number.pre-number{font-size:32px}.brand-logo{max-width:220px;max-height:78px}
+  html,body{height:auto!important;min-height:0!important;overflow:visible!important}
+  body{background:white}
+  .app{display:block!important;height:auto!important;min-height:0!important;overflow:visible!important;padding:0}
+  .panel{display:none!important}
+  .preview-wrap{display:block!important;position:static!important;max-height:none!important;height:auto!important;overflow:visible!important}
+  .sheet{box-shadow:none;margin:0;width:210mm;min-height:297mm;height:auto!important;padding:12mm 12mm;transform:none!important;overflow:visible!important;break-after:auto}
+  .sheet-header,.client,.ref,.obs-totals,.bank,.preorder-header,.preorder-info-grid,.preorder-two-cols,.preorder-bottom,.budget-header,.budget-top-info,.budget-bottom{break-inside:avoid;page-break-inside:avoid}
+  .items,.preorder-items,.budget-main-table{break-inside:auto;page-break-inside:auto}
+  .items tr,.preorder-items tr,.budget-main-table tr,.budget-extra tr{break-inside:avoid;page-break-inside:avoid}
+  thead{display:table-header-group}
+  tfoot{display:table-footer-group}
+  .quote-number{font-size:58px}.quote-number.pre-number{font-size:32px}.brand-logo{max-width:220px;max-height:78px}
   .preorder-sheet{padding:11mm 12mm;font-size:10.5px}.preorder-header{page-break-inside:avoid}.budget-sheet{padding:9mm 12mm 8mm}.budget-header .quote-number.pre-number{font-size:42px}
 }
