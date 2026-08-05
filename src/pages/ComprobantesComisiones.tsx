@@ -356,7 +356,7 @@ export function ComprobantesComisiones() {
 </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / PDF</button></div>
+  <div class="toolbar"><button onclick="window.focus(); window.print()">Imprimir / PDF</button></div>
   <main class="sheet">
     <section class="header">
       <div>
@@ -426,16 +426,25 @@ export function ComprobantesComisiones() {
       <div>Recibido por vendedor</div>
     </section>
   </main>
+  <script>
+    window.addEventListener('load', () => {
+      window.setTimeout(() => {
+        window.focus()
+        window.print()
+      }, 350)
+    })
+  </script>
 </body>
 </html>`
 
-    const win = window.open('', '_blank')
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    const win = window.open(url, '_blank')
     if (!win) {
+      URL.revokeObjectURL(url)
       setMessage('El navegador bloqueó la ventana de impresión.')
       return
     }
-    win.document.write(html)
-    win.document.close()
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
   const activeRules = { ...defaultRules, ...(selectedFormSeller?.commission_rules || {}) }
