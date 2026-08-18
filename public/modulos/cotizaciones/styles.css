@@ -60,6 +60,11 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .reference-block{border:1px solid var(--borde);border-radius:12px;padding:12px;margin-bottom:14px;background:#fbfcfe}
 .reference-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
 .reference-row textarea{min-height:58px}
+.quick-import{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;border:1px dashed #a9c7ee;border-radius:12px;background:#f5f9ff;padding:12px;margin:10px 0 12px}
+.quick-import b{display:block;color:var(--azul);font-size:13px}
+.quick-import p{margin:3px 0 0;color:#526176;font-size:11px;line-height:1.35}
+.quick-import textarea{min-height:92px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;line-height:1.35}
+.quick-import button{justify-self:start}
 .item-section-title{margin-top:4px}
 .item-row{border:1px solid var(--borde);border-radius:12px;padding:12px;margin-bottom:12px;background:#fbfcfe;overflow:visible}
 .item-row .grid{grid-template-columns:100px minmax(260px,1fr) 100px 85px;align-items:end}

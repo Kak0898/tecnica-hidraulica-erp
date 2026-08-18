@@ -352,6 +352,70 @@ function pricePlaceholder(doc=state, compact=false){
 }
 function blankItem(){return {codigo:'', descripcion:'', cantidad:1, um:'UN', precio:0, dscto:0}}
 function subtotalItem(it){return (Number(it.cantidad)||0)*(Number(it.precio)||0)*(1-(Number(it.dscto)||0)/100)}
+function cleanImportCell(value){
+  return String(value || '')
+    .replace(/\*\*/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .trim();
+}
+function parseImportedAmount(value){
+  const raw = cleanImportCell(value)
+    .replace(/[^\d,.\-]/g, '')
+    .trim();
+  if (!raw) return 0;
+  const hasComma = raw.includes(',');
+  const hasDot = raw.includes('.');
+  let normalized = raw;
+  if (hasComma && hasDot) {
+    normalized = raw.lastIndexOf(',') > raw.lastIndexOf('.')
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw.replace(/,/g, '');
+  } else if (hasComma) {
+    normalized = raw.replace(',', '.');
+  } else if (hasDot) {
+    const parts = raw.split('.');
+    normalized = parts.length > 2 || parts[parts.length - 1]?.length === 3 ? raw.replace(/\./g, '') : raw;
+  }
+  return finiteNumber(normalized, 0);
+}
+function importColumnIndex(headers, names, fallback){
+  const normalized = headers.map(header=>String(header || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+  const index = normalized.findIndex(header=>names.some(name=>header.includes(name)));
+  return index >= 0 ? index : fallback;
+}
+function parseItemsFromText(text){
+  const lines = String(text || '').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+  const tableLines = lines.filter(line=>line.includes('|'));
+  if (!tableLines.length) return [];
+  const rows = tableLines
+    .map(line=>line.replace(/^\||\|$/g, '').split('|').map(cleanImportCell))
+    .filter(cells=>cells.some(Boolean))
+    .filter(cells=>!cells.every(cell=>/^:?-{3,}:?$/.test(cell.replace(/\s/g, ''))));
+  if (!rows.length) return [];
+  const first = rows[0].map(cell=>cell.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+  const hasHeader = first.some(cell=>cell.includes('descripcion') || cell.includes('cant') || cell.includes('valor') || cell.includes('precio'));
+  const headers = hasHeader ? rows[0] : ['descripcion', 'cantidad', 'valor unitario neto'];
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const descIndex = importColumnIndex(headers, ['descripcion', 'detalle', 'producto', 'item', 'servicio'], 0);
+  const qtyIndex = importColumnIndex(headers, ['cant', 'cantidad', 'qty'], 1);
+  const priceIndex = importColumnIndex(headers, ['valor unitario', 'precio unitario', 'unitario', 'precio', 'valor'], 2);
+  return dataRows.map(cells=>{
+    const description = cleanImportCell(cells[descIndex] || cells[0] || '');
+    const descriptionKey = description.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!description || /^(subtotal|neto|iva|i\.v\.a|total|total con iva|total iva)/.test(descriptionKey)) return null;
+    const quantity = parseImportedAmount(cells[qtyIndex]) || 1;
+    const price = parseImportedAmount(cells[priceIndex]);
+    if (!price && !description) return null;
+    return {
+      codigo: '',
+      descripcion: description,
+      cantidad: quantity,
+      um: 'UN',
+      precio: roundAmount(price),
+      dscto: 0
+    };
+  }).filter(Boolean);
+}
 function specExample(i){return ['2.600 mm','6.000 mm','540 mm','24V / 220 AH','1.600 Kg','980 Kg','Incluido / Monofásico','Amarillo Industrial','1.150 mm','Doble','Hombre a Bordo','2500 Kg app','2.360 mm','PTP (*)','Magnético','Abierto','Poliuretano'][i] || ''}
 function normalizeSpecName(s){return String(s || '').trim().toLowerCase()}
 function fixedPreSpecs(po){
@@ -418,6 +482,26 @@ function addReferencia(){state.referencias.push({texto:'', items:[blankItem()]})
 function delReferencia(i){state.referencias.splice(i,1); if (!state.referencias.length) state.referencias=[{texto:'', items:[blankItem()]}]; syncReferenciaText(); markDirty(); persist(); render()}
 function addRefItem(r){state.referencias[r].items.push(blankItem()); syncReferenciaText(); markDirty(); persist(); render()}
 function delRefItem(r,i){state.referencias[r].items.splice(i,1); if (!state.referencias[r].items.length) state.referencias[r].items=[blankItem()]; syncReferenciaText(); markDirty(); persist(); render()}
+function importChatGptItems(refIndex){
+  const input = document.getElementById(`quick-import-${refIndex}`);
+  const items = parseItemsFromText(input?.value || '');
+  if (!items.length) {
+    actionMessage = 'No encontré ítems válidos. Pega una tabla con columnas Descripción, Cant. y Valor unitario neto.';
+    render({preserveScroll:true});
+    return;
+  }
+  const current = state.referencias[refIndex]?.items || [];
+  const hasOnlyBlank = current.length === 1
+    && !String(current[0].descripcion || '').trim()
+    && !Number(current[0].precio || 0);
+  state.referencias[refIndex].items = hasOnlyBlank ? items : [...current, ...items];
+  actionMessage = `${items.length} ítem(s) importado(s) desde la tabla pegada.`;
+  syncReferenciaText();
+  markDirty();
+  actionMessage = `${items.length} ítem(s) importado(s) desde la tabla pegada.`;
+  persist();
+  render({preserveScroll:true});
+}
 function blankSpec(){return {nombre:'', valor:''}}
 function blankCargo(){return {detalle:'', precio:0, cantidad:1}}
 function subtotalCargo(it){return (Number(it.cantidad)||1)*(Number(it.precio)||0)}
@@ -1327,6 +1411,16 @@ function render(renderOptions={}){
             <div class="field"><label>Referencia ${r+1}</label><textarea placeholder="Arriendo equipo apilador eléctrico" oninput="setReferenciaSilent(${r},this.value)" onchange="render({preserveScroll:true})">${esc(ref.texto)}</textarea></div>
             <button class="danger" onclick="delReferencia(${r})" ${(state.referencias || []).length <= 1 ? 'disabled' : ''}>Eliminar referencia</button>
           </div>` : ''}
+          <div class="quick-import">
+            <div>
+              <b>Pegar tabla rápida</b>
+              <p>Admite tablas tipo ChatGPT con Descripción, Cant. y Valor unitario neto. Subtotal, IVA y total se ignoran.</p>
+            </div>
+            <textarea id="quick-import-${r}" placeholder="| Descripción | Cant. | Valor unitario neto |
+| --- | ---: | ---: |
+| Cilindro hidráulico doble efecto Ø125/Ø110 × 900 mm | 1 | $5.890.000 |"></textarea>
+            <button class="ghost" onclick="importChatGptItems(${r})">Importar tabla</button>
+          </div>
           <div class="section-title item-section-title">${isFinal ? `Ítems referencia ${r+1}` : 'Detalle del cobro'}</div>
           ${(ref.items || []).map((it,i)=>`
             <div class="item-row">
