@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCheck, Eye, EyeOff, KeyRound, Pencil, Power, PowerOff, RefreshCw, Save, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
+import { Building2, CheckCheck, Eye, EyeOff, KeyRound, Pencil, Power, PowerOff, RefreshCw, Save, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
@@ -23,8 +23,8 @@ const assignableModules = MODULE_GROUPS.flatMap((group) => group.modules.map((mo
 
 const presets: Array<{ label: string; modules: ModuleKey[] }> = [
   { label: 'RR.HH. y pagos', modules: ['rrhh_personas', 'rrhh_contratos', 'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos'] },
-  { label: 'Comercial', modules: ['dashboard', 'clientes', 'presupuestos', 'cotizaciones', 'publicaciones', 'crm', 'whatsapp'] },
-  { label: 'Operaciones', modules: ['dashboard', 'ordenes', 'maquinaria', 'repuestos', 'epp_ropa', 'auditorias', 'importar_excel'] },
+  { label: 'Comercial', modules: ['dashboard', 'clientes', 'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'crm', 'whatsapp'] },
+  { label: 'Operaciones', modules: ['dashboard', 'ordenes', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'auditorias', 'importar_excel'] },
   { label: 'Marketing', modules: ['dashboard', 'google_ads', 'publicaciones', 'crm', 'whatsapp'] },
 ]
 
@@ -91,6 +91,11 @@ export function UsuariosPermisos() {
   const [credentialConfirmation, setCredentialConfirmation] = useState('')
   const [showCredentialPassword, setShowCredentialPassword] = useState(false)
   const [credentialSaving, setCredentialSaving] = useState(false)
+  const [assignEmail, setAssignEmail] = useState('')
+  const [assignEmpresaId, setAssignEmpresaId] = useState('')
+  const [assignRole, setAssignRole] = useState<'admin' | 'operador'>('operador')
+  const [assignSelected, setAssignSelected] = useState<Set<ModuleKey>>(new Set())
+  const [assignSaving, setAssignSaving] = useState(false)
   const [message, setMessage] = useState('')
 
   async function loadUsers() {
@@ -131,6 +136,7 @@ export function UsuariosPermisos() {
     admins: users.filter((user) => ['owner', 'admin'].includes(user.rol)).length,
   }), [users])
   const currentRole = empresas.find((item) => item.empresas?.id === activeEmpresaId)?.rol || ''
+  const adminCompanies = empresas.filter((item) => item.empresas && ['owner', 'admin'].includes(item.rol))
 
   function resetForm() {
     setFullName('')
@@ -216,6 +222,47 @@ export function UsuariosPermisos() {
       else next.add(module)
       return next
     })
+  }
+
+  function toggleAssignModule(module: ModuleKey) {
+    setAssignSelected((current) => {
+      const next = new Set(current)
+      if (next.has(module)) next.delete(module)
+      else next.add(module)
+      return next
+    })
+  }
+
+  async function assignExistingUserToCompany() {
+    const targetEmail = assignEmail.trim().toLowerCase()
+    if (!targetEmail) return setMessage('Selecciona o escribe el correo del usuario que quieres asignar.')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) return setMessage('Ingresa un correo válido.')
+    if (!assignEmpresaId) return setMessage('Selecciona la empresa a la que quieres dar acceso.')
+    if (assignRole === 'operador' && assignSelected.size === 0) return setMessage('Selecciona al menos una sección para esa empresa.')
+
+    setAssignSaving(true)
+    const selectedModules = assignRole === 'admin' ? [...ALL_MODULES] : Array.from(assignSelected)
+    const { data, error } = await supabase.rpc('guardar_permisos_usuario', {
+      p_empresa_id: assignEmpresaId,
+      p_email: targetEmail,
+      p_rol: assignRole,
+      p_modulos: selectedModules,
+    })
+    setAssignSaving(false)
+
+    if (error || !data) {
+      return setMessage(error
+        ? permissionsError(error)
+        : 'No se pudo asignar la empresa. Verifica que el usuario ya exista y que seas administrador de esa empresa.')
+    }
+
+    const targetCompany = adminCompanies.find((item) => item.empresas?.id === assignEmpresaId)?.empresas
+    setMessage(`Acceso asignado correctamente a ${targetEmail}${targetCompany?.nombre ? ` en ${targetCompany.nombre}` : ''}.`)
+    setAssignEmail('')
+    setAssignEmpresaId('')
+    setAssignRole('operador')
+    setAssignSelected(new Set())
+    if (assignEmpresaId === activeEmpresaId) await loadUsers()
   }
 
   async function saveAccess() {
@@ -365,6 +412,39 @@ export function UsuariosPermisos() {
         )}
 
         <div className="mt-6 flex flex-wrap gap-2"><button onClick={saveAccess} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-bold text-white disabled:opacity-50"><Save size={17} />{saving ? 'Guardando...' : editingUser ? 'Actualizar usuario' : 'Crear usuario y guardar'}</button>{editingUser && <button onClick={resetForm} className="inline-flex items-center gap-2 rounded-xl bg-slate-200 px-5 py-3 font-bold text-slate-700"><X size={17} />Cancelar</button>}</div>
+      </Card>
+
+      <Card>
+        <div className="mb-5 flex items-center gap-3">
+          <div className="rounded-xl bg-emerald-100 p-3 text-emerald-700"><Building2 size={21} /></div>
+          <div><h3 className="font-bold text-slate-950">Asignar usuario existente a otra empresa</h3><p className="text-sm text-slate-500">Usa esto cuando el vendedor o trabajador ya tiene cuenta y necesita entrar también a otra empresa.</p></div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_240px]">
+          <label className="text-sm font-bold text-slate-700">Usuario existente
+            <input list="usuarios-existentes" value={assignEmail} onChange={(event) => setAssignEmail(event.target.value)} placeholder="correo@empresa.cl" className="mt-2 w-full rounded-xl border border-slate-300 p-3 font-normal text-slate-950" />
+            <datalist id="usuarios-existentes">{users.map((user) => <option key={user.user_id} value={user.email}>{user.nombre_completo}</option>)}</datalist>
+          </label>
+          <label className="text-sm font-bold text-slate-700">Empresa destino
+            <select value={assignEmpresaId} onChange={(event) => setAssignEmpresaId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950">
+              <option value="">Seleccionar empresa</option>
+              {adminCompanies.map((item) => item.empresas && <option key={item.empresas.id} value={item.empresas.id}>{item.empresas.nombre}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-bold text-slate-700">Rol en esa empresa
+            <select value={assignRole} onChange={(event) => setAssignRole(event.target.value as 'admin' | 'operador')} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 font-normal text-slate-950"><option value="operador">Usuario por módulos</option><option value="admin">Administrador completo</option></select>
+          </label>
+        </div>
+
+        {assignRole === 'admin' ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900">El usuario quedará como administrador completo en la empresa seleccionada.</div> : <div className="mt-6">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold text-slate-950">Secciones permitidas en la empresa destino</h4><div className="flex flex-wrap gap-2"><button onClick={() => setAssignSelected(new Set(assignableModules))} className="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800"><CheckCheck size={14} className="mr-1 inline" />Todas</button><button onClick={() => setAssignSelected(new Set())} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"><X size={14} className="mr-1 inline" />Ninguna</button></div></div>
+          <div className="mb-4 flex flex-wrap gap-2">{presets.map((preset) => <button key={preset.label} onClick={() => setAssignSelected(new Set(preset.modules))} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800">Perfil {preset.label}</button>)}</div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {MODULE_GROUPS.map((group) => <div key={group.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-500">{group.label}</p><div className="space-y-2">{group.modules.map((module) => <label key={module.key} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={assignSelected.has(module.key)} onChange={() => toggleAssignModule(module.key)} className="h-4 w-4 rounded accent-blue-600" />{module.label}</label>)}</div></div>)}
+          </div>
+        </div>}
+
+        <div className="mt-6 flex flex-wrap gap-2"><button onClick={assignExistingUserToCompany} disabled={assignSaving || !adminCompanies.length} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white disabled:opacity-50"><Building2 size={17} />{assignSaving ? 'Asignando...' : 'Asignar empresa'}</button>{!adminCompanies.length && <span className="self-center text-sm font-semibold text-slate-500">No tienes empresas administrables para asignar.</span>}</div>
       </Card>
 
       {credentialUser && <div id="credenciales-usuario"><Card className="border-blue-200 bg-blue-50/40">
