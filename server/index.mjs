@@ -33,6 +33,8 @@ const transferReceiptRoot = path.resolve(documentRoot, 'cotizaciones')
 const employeeDocumentRoot = path.resolve(documentRoot, 'empleado')
 const companyDocumentBucket = 'documentos-empresa'
 const companyDocumentRoot = path.resolve(documentRoot, 'empresa')
+const vehicleFileBucket = 'vehiculos-archivos'
+const vehicleFileRoot = path.resolve(documentRoot, 'vehiculos')
 const displayStoragePath = (value) => String(value).replace(/^\/private\/var(?=\/)/, '/var')
 const maxUploadBytes = Math.max(1, Number(process.env.MAX_UPLOAD_MB || 15)) * 1024 * 1024
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxUploadBytes, files: 1 } })
@@ -362,7 +364,7 @@ app.post('/api/functions/sincronizar-google-ads', authenticate, async (req, res)
 })
 
 function safeStoragePath(bucket, objectPath) {
-  if (!['empresa-assets', 'rrhh-documentos', transferReceiptBucket, companyDocumentBucket].includes(bucket)) throw Object.assign(new Error('Contenedor de archivos no permitido.'), { status: 400 })
+  if (!['empresa-assets', 'rrhh-documentos', transferReceiptBucket, companyDocumentBucket, vehicleFileBucket].includes(bucket)) throw Object.assign(new Error('Contenedor de archivos no permitido.'), { status: 400 })
   const normalized = String(objectPath || '').replaceAll('\\', '/').replace(/^\/+/, '')
   if (!normalized || normalized.split('/').some((part) => !part || part === '.' || part === '..')) {
     throw Object.assign(new Error('Ruta de archivo inválida.'), { status: 400 })
@@ -373,7 +375,9 @@ function safeStoragePath(bucket, objectPath) {
       ? employeeDocumentRoot
       : bucket === companyDocumentBucket
         ? companyDocumentRoot
-        : path.resolve(uploadRoot, bucket)
+        : bucket === vehicleFileBucket
+          ? vehicleFileRoot
+          : path.resolve(uploadRoot, bucket)
   const absolute = path.resolve(bucketRoot, normalized)
   const expectedRoot = bucketRoot + path.sep
   if (!absolute.startsWith(expectedRoot)) throw Object.assign(new Error('Ruta de archivo inválida.'), { status: 400 })
@@ -411,7 +415,9 @@ async function authorizeStorage(userId, bucket, objectPath, write = false) {
       ? 'comprobantes_comisiones'
       : bucket === companyDocumentBucket
         ? 'documentos_empresa'
-        : 'configuracion'
+        : bucket === vehicleFileBucket
+          ? 'flota'
+          : 'configuracion'
   if (!access.modules.has(required)) throw Object.assign(new Error(write ? 'No tienes permiso para modificar estos archivos.' : 'No tienes permiso para abrir estos archivos.'), { status: 403 })
   return companyId
 }

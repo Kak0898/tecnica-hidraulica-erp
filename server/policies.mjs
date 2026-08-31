@@ -57,6 +57,7 @@ export const TABLE_ACCESS = {
   ia_consultas: access(['ia'], ['ia']),
   empresas_asociadas: access(['empresas_asociadas', 'flota'], ['empresas_asociadas']),
   vehiculos_empresa: access(['flota'], ['flota']),
+  vehiculo_archivos: access(['flota'], ['flota']),
   epp_items: access(['epp_ropa'], ['epp_ropa', 'importar_excel']),
   epp_worker_sizes: access(['epp_ropa'], ['epp_ropa', 'importar_excel']),
   documentos_empresa: access(['documentos_empresa'], ['documentos_empresa']),
