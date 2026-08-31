@@ -160,6 +160,7 @@ const RPC_PARAMETERS = {
   cambiar_estado_usuario_empresa: ['p_empresa_id', 'p_user_id', 'p_activo'],
   crear_ot_desde_cotizacion_documento: ['doc_id'],
   create_empresa_owner: ['p_nombre', 'p_slug', 'p_rut', 'p_email', 'p_telefono', 'p_direccion', 'p_rubro'],
+  eliminar_empresa_confirmada: ['p_empresa_id', 'p_fecha_confirmacion'],
   generar_recomendaciones_google_ads: ['p_fecha'],
   guardar_permisos_usuario: ['p_empresa_id', 'p_email', 'p_rol', 'p_modulos'],
   listar_usuarios_empresa_detalle: ['p_empresa_id'],

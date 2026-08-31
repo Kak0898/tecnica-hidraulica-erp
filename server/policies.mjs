@@ -127,6 +127,7 @@ export const RPC_ALLOWLIST = new Set([
   'cambiar_estado_usuario_empresa',
   'crear_ot_desde_cotizacion_documento',
   'create_empresa_owner',
+  'eliminar_empresa_confirmada',
   'generar_recomendaciones_google_ads',
   'guardar_permisos_usuario',
   'listar_usuarios_empresa_detalle',

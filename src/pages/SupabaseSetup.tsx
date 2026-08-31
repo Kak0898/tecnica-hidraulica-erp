@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Building2, CheckCircle2, Database, LogIn, LogOut, RefreshCw, ShieldAlert, UserRound } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, Database, LogIn, LogOut, RefreshCw, ShieldAlert, Trash2, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
@@ -40,6 +40,11 @@ type UsuarioEmpresa = {
   empresas: Empresa | null
 }
 
+function localDateValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 export function SupabaseSetup() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -64,6 +69,8 @@ export function SupabaseSetup() {
     telefono: '',
     direccion: '',
   })
+  const [deleteEmpresaId, setDeleteEmpresaId] = useState('')
+  const [deleteConfirmationDate, setDeleteConfirmationDate] = useState('')
   const [brandingForm, setBrandingForm] = useState({
     razon_social: '',
     rut: '',
@@ -310,6 +317,44 @@ export function SupabaseSetup() {
     })
     setActionLoading(false)
     setMessage('Empresa creada y marcada como activa.')
+    window.dispatchEvent(new CustomEvent('erp-company-updated'))
+    await load()
+  }
+
+  async function deleteEmpresa() {
+    const target = empresas.find((item) => item.empresas?.id === deleteEmpresaId)
+    const targetEmpresa = target?.empresas
+    const today = localDateValue()
+    if (!targetEmpresa) {
+      setMessage('Selecciona la empresa que quieres eliminar.')
+      return
+    }
+    if (!['owner', 'admin'].includes(target.rol)) {
+      setMessage('Solo puedes eliminar empresas donde eres administrador.')
+      return
+    }
+    if (deleteConfirmationDate !== today) {
+      setMessage(`Para eliminar la empresa debes ingresar la fecha de hoy: ${today}.`)
+      return
+    }
+    if (!window.confirm(`Esta accion eliminara definitivamente "${targetEmpresa.nombre}" y sus datos asociados. ¿Confirmas eliminar la empresa?`)) return
+
+    setActionLoading(true)
+    setMessage('')
+    const { data, error } = await supabase.rpc('eliminar_empresa_confirmada', {
+      p_empresa_id: targetEmpresa.id,
+      p_fecha_confirmacion: deleteConfirmationDate,
+    })
+    setActionLoading(false)
+
+    if (error || !data) {
+      setMessage(`No se pudo eliminar la empresa: ${error?.message || 'confirmacion rechazada por la base de datos.'}`)
+      return
+    }
+
+    setDeleteEmpresaId('')
+    setDeleteConfirmationDate('')
+    setMessage(`Empresa "${targetEmpresa.nombre}" eliminada correctamente.`)
     window.dispatchEvent(new CustomEvent('erp-company-updated'))
     await load()
   }
@@ -631,6 +676,34 @@ export function SupabaseSetup() {
           )}
         </Card>
       </div>
+
+      {empresas.some((item) => item.empresas && ['owner', 'admin'].includes(item.rol)) && <Card className="mt-6 border-red-200 bg-red-50/40">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="rounded-xl bg-red-100 p-3 text-red-700"><AlertTriangle size={21} /></div>
+          <div>
+            <h3 className="text-lg font-bold text-red-950">Eliminar empresa</h3>
+            <p className="mt-1 text-sm leading-6 text-red-900">Esta accion borra definitivamente la empresa seleccionada y sus datos asociados. Para confirmar, ingresa la fecha de hoy.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Empresa a eliminar
+            <select value={deleteEmpresaId} onChange={(event) => setDeleteEmpresaId(event.target.value)} className="rounded border border-red-200 bg-white px-3 py-3 font-normal text-slate-950">
+              <option value="">Seleccionar empresa</option>
+              {empresas.filter((item) => item.empresas && ['owner', 'admin'].includes(item.rol)).map((item) => item.empresas && <option key={item.empresas.id} value={item.empresas.id}>{item.empresas.nombre} · {item.rol}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Fecha de hoy
+            <input type="date" value={deleteConfirmationDate} onChange={(event) => setDeleteConfirmationDate(event.target.value)} className="rounded border border-red-200 bg-white px-3 py-3 font-normal text-slate-950" />
+          </label>
+          <button onClick={deleteEmpresa} disabled={actionLoading || !deleteEmpresaId} className="inline-flex items-center justify-center gap-2 rounded bg-red-700 px-4 py-3 font-semibold text-white disabled:opacity-50">
+            <Trash2 size={18} />
+            Eliminar
+          </button>
+        </div>
+        <p className="mt-3 text-xs font-semibold text-red-800">Fecha requerida hoy: {localDateValue()}.</p>
+      </Card>}
 
       <Card className="mt-6">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
