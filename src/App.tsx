@@ -28,6 +28,7 @@ const EmpresasAsociadas = lazy(() => import('./pages/EmpresasAsociadas').then((m
 const FlotaVehiculos = lazy(() => import('./pages/FlotaVehiculos').then((module) => ({ default: module.FlotaVehiculos })))
 const PublicacionesProductos = lazy(() => import('./pages/PublicacionesProductos').then((module) => ({ default: module.PublicacionesProductos })))
 const EppRopa = lazy(() => import('./pages/EppRopa').then((module) => ({ default: module.EppRopa })))
+const DocumentosEmpresa = lazy(() => import('./pages/DocumentosEmpresa').then((module) => ({ default: module.DocumentosEmpresa })))
 const UsuariosPermisos = lazy(() => import('./pages/UsuariosPermisos').then((module) => ({ default: module.UsuariosPermisos })))
 const ComprobantesComisiones = lazy(() => import('./pages/ComprobantesComisiones').then((module) => ({ default: module.ComprobantesComisiones })))
 const ImportarCotizaciones = lazy(() => import('./components/ImportarCotizaciones').then((module) => ({ default: module.ImportarCotizaciones })))
@@ -142,6 +143,7 @@ export default function App(){
   {page==='maquinaria' && <Maquinaria/>}
   {page==='repuestos' && <Repuestos/>}
   {page==='epp-ropa' && <EppRopa/>}
+  {page==='documentos-empresa' && <DocumentosEmpresa/>}
   {page==='auditorias' && <Auditorias/>}
   {page==='importar' && <Importar/>}
   {page==='usuarios-permisos' && <UsuariosPermisos/>}

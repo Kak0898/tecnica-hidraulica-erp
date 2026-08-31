@@ -3,7 +3,7 @@ export const ALL_MODULES = [
   'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'ordenes',
   'crm', 'whatsapp', 'rrhh_personas', 'rrhh_contratos',
   'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos',
-  'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'auditorias',
+  'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'auditorias',
   'importar_excel', 'ia', 'configuracion', 'usuarios_permisos',
 ]
 
@@ -59,6 +59,7 @@ export const TABLE_ACCESS = {
   vehiculos_empresa: access(['flota'], ['flota']),
   epp_items: access(['epp_ropa'], ['epp_ropa', 'importar_excel']),
   epp_worker_sizes: access(['epp_ropa'], ['epp_ropa', 'importar_excel']),
+  documentos_empresa: access(['documentos_empresa'], ['documentos_empresa']),
   productos_comerciales: access(['publicaciones'], ['publicaciones']),
   publicaciones_productos: access(['publicaciones'], ['publicaciones']),
 }

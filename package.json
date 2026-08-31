@@ -16,6 +16,7 @@
     "db:seed:vendedores": "node database/seed-vendedores.mjs",
     "db:seed:comprobantes": "node database/seed-comprobantes.mjs",
     "db:seed:documentos": "node database/seed-documentos.mjs",
+    "db:seed:documentos-empresa": "node database/seed-documentos-empresa.mjs",
     "db:seed:comisiones-importacion": "node database/seed-comisiones-importacion.mjs",
     "db:seed:ordenes-formato": "node database/seed-ordenes-formato.mjs",
     "db:migrate:supabase": "node database/migrate-from-supabase.mjs",
