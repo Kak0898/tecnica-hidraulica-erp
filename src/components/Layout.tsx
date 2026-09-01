@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Archive, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, Settings, Shirt, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
+import { Archive, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, ServerCog, Settings, Shirt, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { usePermisos } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
@@ -44,6 +44,7 @@ const groups = [
       { key: 'repuestos', label: 'Repuestos', icon: PackageSearch },
       { key: 'epp-ropa', label: 'EPP y ropa', icon: Shirt },
       { key: 'documentos-empresa', label: 'Archivo documental', icon: Archive },
+      { key: 'cpanel-hosting', label: 'cPanel y hosting', icon: ServerCog },
       { key: 'auditorias', label: 'Auditorías', icon: ClipboardCheck },
       { key: 'importar', label: 'Importar Excel', icon: FileSpreadsheet },
     ],

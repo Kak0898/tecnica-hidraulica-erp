@@ -42,6 +42,7 @@ export const MODULE_GROUPS = [
       { key: 'repuestos', label: 'Repuestos' },
       { key: 'epp_ropa', label: 'EPP y ropa' },
       { key: 'documentos_empresa', label: 'Archivo documental' },
+      { key: 'cpanel_hosting', label: 'cPanel y hosting' },
       { key: 'auditorias', label: 'Auditorías' },
       { key: 'importar_excel', label: 'Importar Excel' },
     ],
@@ -84,6 +85,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
   repuestos: 'repuestos',
   'epp-ropa': 'epp_ropa',
   'documentos-empresa': 'documentos_empresa',
+  'cpanel-hosting': 'cpanel_hosting',
   auditorias: 'auditorias',
   importar: 'importar_excel',
   ia: 'ia',
@@ -96,7 +98,7 @@ const PAGE_ORDER = [
   'cotizaciones', 'comprobantes-comisiones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
   'rrhh-personas', 'rrhh-contratos', 'rrhh-ausencias', 'rrhh-documentos',
   'personas-pagos', 'flota-vehiculos', 'maquinaria', 'repuestos', 'epp-ropa',
-  'documentos-empresa', 'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',
+  'documentos-empresa', 'cpanel-hosting', 'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',
 ]
 
 type PermissionsContextValue = {
