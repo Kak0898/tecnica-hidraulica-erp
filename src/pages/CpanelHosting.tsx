@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, CheckCircle2, Copy, Eye, EyeOff, ExternalLink, Globe2, KeyRound, LoaderCircle, RefreshCw, Save, ServerCog, ShieldAlert, Unlock } from 'lucide-react'
+import { AlertTriangle, ArrowRight, AtSign, CheckCircle2, Copy, Eye, EyeOff, ExternalLink, Globe2, KeyRound, LoaderCircle, Pencil, RefreshCw, Save, ServerCog, ShieldAlert, Trash2, Unlock } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
@@ -17,6 +17,19 @@ type HostingCredentials = {
   url: string
   usuario: string
   notas?: string | null
+  tiene_password: boolean
+  updated_at?: string
+  actualizado_por?: string | null
+}
+type EmailCredential = {
+  id: string
+  nombre?: string | null
+  correo: string
+  usuario: string
+  imap_host?: string | null
+  smtp_host?: string | null
+  notas?: string | null
+  activo: boolean
   tiene_password: boolean
   updated_at?: string
   actualizado_por?: string | null
@@ -41,6 +54,13 @@ export function CpanelHosting() {
   const [savingCredentials, setSavingCredentials] = useState(false)
   const [loadingCredentials, setLoadingCredentials] = useState(false)
   const [revealingCredentials, setRevealingCredentials] = useState(false)
+  const [emailCredentials, setEmailCredentials] = useState<EmailCredential[]>([])
+  const [emailForm, setEmailForm] = useState({ id: '', nombre: '', correo: '', usuario: '', password: '', imap_host: 'mail.tecnicahidraulica.cl', smtp_host: 'mail.tecnicahidraulica.cl', notas: '', activo: true })
+  const [loadingEmailCredentials, setLoadingEmailCredentials] = useState(false)
+  const [savingEmailCredential, setSavingEmailCredential] = useState(false)
+  const [revealingEmailId, setRevealingEmailId] = useState('')
+  const [emailCurrentPassword, setEmailCurrentPassword] = useState('')
+  const [revealedEmailPassword, setRevealedEmailPassword] = useState('')
 
   const frameUrl = useMemo(() => mode === 'cpanel' ? CPANEL_URL : SUPPORT_URL, [mode])
 
@@ -81,6 +101,17 @@ export function CpanelHosting() {
   }
 
   useEffect(() => { void loadCredentials() }, [activeEmpresaId, isAdmin])
+
+  async function loadEmailCredentials() {
+    if (!activeEmpresaId || !isAdmin) return
+    setLoadingEmailCredentials(true)
+    const { data, error } = await supabase.functions.invoke('hosting-email-credentials-list', { body: { empresa_id: activeEmpresaId } })
+    if (error) setMessage(`No se pudieron cargar los correos: ${error.message}`)
+    else setEmailCredentials((data || []) as EmailCredential[])
+    setLoadingEmailCredentials(false)
+  }
+
+  useEffect(() => { void loadEmailCredentials() }, [activeEmpresaId, isAdmin])
 
   async function copyDomain() {
     try {
@@ -157,6 +188,87 @@ export function CpanelHosting() {
       setMessage(`${label} copiado.`)
     } catch {
       setMessage(`${label}: ${value}`)
+    }
+  }
+
+  function resetEmailForm() {
+    setEmailForm({ id: '', nombre: '', correo: '', usuario: '', password: '', imap_host: 'mail.tecnicahidraulica.cl', smtp_host: 'mail.tecnicahidraulica.cl', notas: '', activo: true })
+  }
+
+  function editEmailCredential(item: EmailCredential) {
+    setEmailForm({
+      id: item.id,
+      nombre: item.nombre || '',
+      correo: item.correo || '',
+      usuario: item.usuario || item.correo || '',
+      password: '',
+      imap_host: item.imap_host || 'mail.tecnicahidraulica.cl',
+      smtp_host: item.smtp_host || 'mail.tecnicahidraulica.cl',
+      notas: item.notas || '',
+      activo: item.activo !== false,
+    })
+    setRevealedEmailPassword('')
+    setEmailCurrentPassword('')
+    setRevealingEmailId('')
+  }
+
+  async function saveEmailCredential() {
+    if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar correos.')
+    if (!isAdmin) return setMessage('Solo administradores pueden guardar correos.')
+    if (!emailForm.correo.trim()) return setMessage('Ingresa el correo.')
+    if (!emailForm.id && !emailForm.password) return setMessage('Ingresa la contraseña del correo para crear el registro.')
+    setSavingEmailCredential(true)
+    const { error } = await supabase.functions.invoke('hosting-email-credentials-save', {
+      body: {
+        empresa_id: activeEmpresaId,
+        id: emailForm.id || undefined,
+        nombre: emailForm.nombre,
+        correo: emailForm.correo,
+        usuario: emailForm.usuario || emailForm.correo,
+        password: emailForm.password,
+        imap_host: emailForm.imap_host,
+        smtp_host: emailForm.smtp_host,
+        notas: emailForm.notas,
+        activo: emailForm.activo,
+      },
+    })
+    if (error) {
+      setMessage(`No se pudo guardar el correo: ${error.message}`)
+    } else {
+      setMessage(emailForm.id ? 'Credencial de correo actualizada.' : 'Credencial de correo guardada.')
+      resetEmailForm()
+      await loadEmailCredentials()
+    }
+    setSavingEmailCredential(false)
+  }
+
+  async function revealEmailCredential(item: EmailCredential) {
+    if (!activeEmpresaId) return setMessage('Selecciona una empresa.')
+    if (!emailCurrentPassword) return setMessage('Ingresa tu contraseña del ERP para revelar la clave del correo.')
+    setRevealingEmailId(item.id)
+    const { data, error } = await supabase.functions.invoke('hosting-email-credentials-reveal', {
+      body: { empresa_id: activeEmpresaId, id: item.id, current_password: emailCurrentPassword },
+    })
+    if (error) {
+      setRevealedEmailPassword('')
+      setMessage(`No se pudo revelar la contraseña: ${error.message}`)
+    } else {
+      setRevealedEmailPassword(data.password || '')
+      setMessage(`Contraseña revelada temporalmente para ${item.correo}.`)
+    }
+    setRevealingEmailId('')
+  }
+
+  async function deleteEmailCredential(item: EmailCredential) {
+    if (!activeEmpresaId) return
+    const ok = window.confirm(`¿Eliminar la credencial de ${item.correo}?`)
+    if (!ok) return
+    const { error } = await supabase.functions.invoke('hosting-email-credentials-delete', { body: { empresa_id: activeEmpresaId, id: item.id } })
+    if (error) setMessage(`No se pudo eliminar el correo: ${error.message}`)
+    else {
+      setMessage('Credencial de correo eliminada.')
+      if (emailForm.id === item.id) resetEmailForm()
+      await loadEmailCredentials()
     }
   }
 
@@ -269,6 +381,111 @@ export function CpanelHosting() {
         </div>}
 
         {credentials?.updated_at && <p className="mt-4 text-xs text-slate-500">Ultima actualización: {new Date(credentials.updated_at).toLocaleString('es-CL')} {credentials.actualizado_por ? `por ${credentials.actualizado_por}` : ''}</p>}
+      </Card>}
+
+      {isAdmin && <Card className="xl:col-span-2">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700"><AtSign size={24} /></div>
+            <div>
+              <h3 className="text-lg font-black text-slate-950">Correos y contraseñas</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Registro interno de cuentas de correo del hosting. Las contraseñas quedan cifradas y no se muestran en la lista.</p>
+            </div>
+          </div>
+          {loadingEmailCredentials && <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600"><LoaderCircle className="animate-spin" size={14} /> Cargando correos</span>}
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-3">
+          <label className={labelClass}>Nombre / responsable
+            <input className={inputClass} value={emailForm.nombre} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, nombre: event.target.value })} placeholder="Secretaría, ventas, Franco..." />
+          </label>
+          <label className={labelClass}>Correo
+            <input className={inputClass} value={emailForm.correo} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, correo: event.target.value, usuario: emailForm.usuario || event.target.value })} placeholder="correo@tecnicahidraulica.cl" />
+          </label>
+          <label className={labelClass}>Usuario
+            <input className={inputClass} value={emailForm.usuario} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, usuario: event.target.value })} placeholder="Normalmente el mismo correo" />
+          </label>
+          <label className={labelClass}>Contraseña
+            <input className={inputClass} type="password" value={emailForm.password} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, password: event.target.value })} placeholder={emailForm.id ? 'Dejar en blanco para mantener la actual' : 'Contraseña del correo'} autoComplete="new-password" />
+          </label>
+          <label className={labelClass}>Servidor IMAP
+            <input className={inputClass} value={emailForm.imap_host} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, imap_host: event.target.value })} />
+          </label>
+          <label className={labelClass}>Servidor SMTP
+            <input className={inputClass} value={emailForm.smtp_host} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, smtp_host: event.target.value })} />
+          </label>
+          <label className={`${labelClass} lg:col-span-2`}>Notas
+            <input className={inputClass} value={emailForm.notas} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, notas: event.target.value })} placeholder="Uso, equipo donde está configurado, observaciones..." />
+          </label>
+          <label className="mt-7 flex items-center gap-2 text-sm font-black text-slate-700">
+            <input type="checkbox" checked={emailForm.activo} disabled={savingEmailCredential} onChange={(event) => setEmailForm({ ...emailForm, activo: event.target.checked })} className="h-4 w-4 rounded border-slate-300" />
+            Cuenta activa
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={saveEmailCredential} disabled={savingEmailCredential || loadingEmailCredentials} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {savingEmailCredential ? <LoaderCircle className="animate-spin" size={17} /> : <Save size={17} />} {emailForm.id ? 'Actualizar correo' : 'Guardar correo'}
+          </button>
+          {emailForm.id && <button onClick={resetEmailForm} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50">Nuevo correo</button>}
+          <button onClick={loadEmailCredentials} disabled={loadingEmailCredentials} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={17} /> Actualizar lista</button>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <label className={labelClass}>Tu contraseña del ERP para revelar claves de correos
+            <input className={inputClass} type="password" value={emailCurrentPassword} onChange={(event) => setEmailCurrentPassword(event.target.value)} placeholder="Se pedirá cada vez que necesites ver una contraseña" autoComplete="current-password" />
+          </label>
+          {revealedEmailPassword && <div className="mt-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase text-slate-500">Contraseña revelada</p>
+              <p className="mt-1 break-all font-mono text-sm font-bold text-slate-950">{revealedEmailPassword}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => copyCredential(revealedEmailPassword, 'Contraseña')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white">Copiar</button>
+              <button onClick={() => { setRevealedEmailPassword(''); setEmailCurrentPassword('') }} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-black text-slate-700">Ocultar</button>
+            </div>
+          </div>}
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full min-w-[920px] text-left text-sm">
+            <thead className="border-b text-xs font-black uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="p-3">Correo</th>
+                <th className="p-3">Usuario</th>
+                <th className="p-3">Servidores</th>
+                <th className="p-3">Estado</th>
+                <th className="p-3">Notas</th>
+                <th className="p-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!emailCredentials.length && <tr><td colSpan={6} className="p-6 text-center font-semibold text-slate-500">Aún no hay correos registrados.</td></tr>}
+              {emailCredentials.map((item) => <tr key={item.id} className="border-b align-top">
+                <td className="p-3">
+                  <p className="font-black text-slate-950">{item.correo}</p>
+                  {item.nombre && <p className="mt-1 text-xs text-slate-500">{item.nombre}</p>}
+                  <p className="mt-1 text-xs font-semibold text-emerald-700">{item.tiene_password ? 'Contraseña guardada' : 'Sin contraseña'}</p>
+                </td>
+                <td className="p-3 font-semibold text-slate-700">{item.usuario}</td>
+                <td className="p-3 text-xs leading-5 text-slate-600">
+                  <p><b>IMAP:</b> {item.imap_host || '-'}</p>
+                  <p><b>SMTP:</b> {item.smtp_host || '-'}</p>
+                </td>
+                <td className="p-3"><span className={`rounded-full px-2.5 py-1 text-xs font-black ${item.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{item.activo ? 'Activa' : 'Inactiva'}</span></td>
+                <td className="max-w-xs p-3 text-xs leading-5 text-slate-600">{item.notas || '-'}</td>
+                <td className="p-3">
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => copyCredential(item.correo, 'Correo')} title="Copiar correo" className="rounded-lg bg-slate-100 p-2 text-slate-700"><Copy size={16} /></button>
+                    <button onClick={() => editEmailCredential(item)} title="Editar" className="rounded-lg bg-amber-100 p-2 text-amber-800"><Pencil size={16} /></button>
+                    <button onClick={() => revealEmailCredential(item)} disabled={revealingEmailId === item.id} title="Revelar contraseña" className="rounded-lg bg-blue-100 p-2 text-blue-700 disabled:opacity-50">{revealingEmailId === item.id ? <LoaderCircle className="animate-spin" size={16} /> : <Eye size={16} />}</button>
+                    <button onClick={() => deleteEmailCredential(item)} title="Eliminar" className="rounded-lg bg-red-100 p-2 text-red-700"><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
       </Card>}
 
       <Card className="border-amber-200 bg-amber-50">

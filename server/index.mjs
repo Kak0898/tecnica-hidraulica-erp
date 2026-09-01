@@ -452,6 +452,133 @@ app.post('/api/functions/hosting-credentials-reveal', authenticate, async (req, 
   }
 })
 
+app.post('/api/functions/hosting-email-credentials-list', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  if (!companyId) return res.status(400).json({ error: 'Empresa obligatoria.' })
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    const result = await pool.query(`
+      select ec.id, ec.nombre, ec.correo, ec.usuario, ec.imap_host, ec.smtp_host, ec.notas,
+             ec.activo, ec.updated_at, ec.password_ciphertext is not null as tiene_password,
+             coalesce(pu.nombre_completo, au.email) as actualizado_por
+        from public.correo_credenciales ec
+        left join public.perfiles_usuarios pu on pu.user_id = ec.updated_by
+        left join auth.users au on au.id = ec.updated_by
+       where ec.empresa_id = $1
+       order by ec.activo desc, ec.correo asc
+    `, [companyId])
+    res.json({ data: result.rows })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'EMAIL_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/hosting-email-credentials-save', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const id = String(req.body?.id || '')
+  const nombre = String(req.body?.nombre || '').trim()
+  const correo = String(req.body?.correo || '').trim().toLowerCase()
+  const usuario = String(req.body?.usuario || correo).trim()
+  const password = String(req.body?.password || '')
+  const imapHost = String(req.body?.imap_host || 'mail.tecnicahidraulica.cl').trim()
+  const smtpHost = String(req.body?.smtp_host || 'mail.tecnicahidraulica.cl').trim()
+  const notas = String(req.body?.notas || '').trim()
+  const activo = req.body?.activo !== false
+  if (!companyId) return res.status(400).json({ error: 'Empresa obligatoria.' })
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return res.status(400).json({ error: 'Ingresa un correo válido.' })
+  if (!usuario) return res.status(400).json({ error: 'Ingresa el usuario del correo.' })
+
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    const current = id
+      ? await pool.query(`select id from public.correo_credenciales where id = $1 and empresa_id = $2 limit 1`, [id, companyId])
+      : { rowCount: 0 }
+    if (id && !current.rowCount) return res.status(404).json({ error: 'La credencial de correo no existe.' })
+    if (!id && !password) return res.status(400).json({ error: 'Ingresa la contraseña del correo para crear el registro.' })
+    const encrypted = password ? encryptSecret(password) : null
+    const result = id
+      ? await pool.query(`
+          update public.correo_credenciales set
+            nombre = $3,
+            correo = $4,
+            usuario = $5,
+            password_ciphertext = coalesce($6, password_ciphertext),
+            password_iv = coalesce($7, password_iv),
+            password_tag = coalesce($8, password_tag),
+            imap_host = $9,
+            smtp_host = $10,
+            notas = $11,
+            activo = $12,
+            updated_by = $13,
+            updated_at = now()
+          where id = $1 and empresa_id = $2
+          returning id, nombre, correo, usuario, imap_host, smtp_host, notas, activo, updated_at,
+                    password_ciphertext is not null as tiene_password
+        `, [id, companyId, nombre || null, correo, usuario, encrypted?.ciphertext || null, encrypted?.iv || null, encrypted?.tag || null, imapHost || null, smtpHost || null, notas || null, activo, req.user.id])
+      : await pool.query(`
+          insert into public.correo_credenciales (
+            empresa_id, nombre, correo, usuario, password_ciphertext, password_iv, password_tag,
+            imap_host, smtp_host, notas, activo, created_by, updated_by
+          ) values (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12
+          )
+          returning id, nombre, correo, usuario, imap_host, smtp_host, notas, activo, updated_at,
+                    password_ciphertext is not null as tiene_password
+        `, [companyId, nombre || null, correo, usuario, encrypted?.ciphertext, encrypted?.iv, encrypted?.tag, imapHost || null, smtpHost || null, notas || null, activo, req.user.id])
+    res.json({ data: result.rows[0] })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'EMAIL_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/hosting-email-credentials-reveal', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const id = String(req.body?.id || '')
+  const currentPassword = String(req.body?.current_password || '')
+  if (!companyId || !id || !currentPassword) return res.status(400).json({ error: 'Empresa, correo y contraseña actual son obligatorios.' })
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    await validateCurrentPassword(req.user.id, currentPassword)
+    const result = await pool.query(`
+      select id, correo, usuario, password_ciphertext, password_iv, password_tag
+        from public.correo_credenciales
+       where id = $1 and empresa_id = $2
+       limit 1
+    `, [id, companyId])
+    if (!result.rowCount) return res.status(404).json({ error: 'La credencial de correo no existe.' })
+    const row = result.rows[0]
+    res.json({ data: { id: row.id, correo: row.correo, usuario: row.usuario, password: decryptSecret(row) } })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'EMAIL_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/hosting-email-credentials-delete', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const id = String(req.body?.id || '')
+  if (!companyId || !id) return res.status(400).json({ error: 'Empresa y correo son obligatorios.' })
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    const result = await pool.query(`delete from public.correo_credenciales where id = $1 and empresa_id = $2 returning id`, [id, companyId])
+    if (!result.rowCount) return res.status(404).json({ error: 'La credencial de correo no existe.' })
+    res.json({ data: { id } })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'EMAIL_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
 app.post('/api/functions/estado-google-ads', authenticate, async (req, res) => {
   try {
     const companyId = await getActiveCompany(req.user.id)
