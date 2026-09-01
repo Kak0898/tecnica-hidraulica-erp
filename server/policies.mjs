@@ -3,7 +3,7 @@ export const ALL_MODULES = [
   'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'ordenes',
   'crm', 'whatsapp', 'rrhh_personas', 'rrhh_contratos',
   'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos',
-  'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'auditorias',
+  'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'cpanel_hosting', 'auditorias',
   'importar_excel', 'ia', 'configuracion', 'usuarios_permisos',
 ]
 

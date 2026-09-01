@@ -17,6 +17,7 @@
     "db:seed:comprobantes": "node database/seed-comprobantes.mjs",
     "db:seed:documentos": "node database/seed-documentos.mjs",
     "db:seed:documentos-empresa": "node database/seed-documentos-empresa.mjs",
+    "db:seed:hosting-credenciales": "node database/seed-hosting-credenciales.mjs",
     "db:seed:vehiculo-archivos": "node database/seed-vehiculo-archivos.mjs",
     "db:seed:eliminar-empresa-confirmada": "node database/seed-eliminar-empresa-confirmada.mjs",
     "db:seed:comisiones-importacion": "node database/seed-comisiones-importacion.mjs",

@@ -5,7 +5,7 @@ import express from 'express'
 import { rateLimit } from 'express-rate-limit'
 import helmet from 'helmet'
 import multer from 'multer'
-import { randomUUID } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -38,6 +38,7 @@ const vehicleFileRoot = path.resolve(documentRoot, 'vehiculos')
 const displayStoragePath = (value) => String(value).replace(/^\/private\/var(?=\/)/, '/var')
 const maxUploadBytes = Math.max(1, Number(process.env.MAX_UPLOAD_MB || 15)) * 1024 * 1024
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxUploadBytes, files: 1 } })
+const credentialsKey = createHash('sha256').update(String(process.env.CREDENTIALS_SECRET || process.env.JWT_SECRET)).digest()
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -315,6 +316,138 @@ app.post('/api/functions/actualizar-credenciales-usuario', authenticate, async (
     res.json({ data: { user_id: updated.rows[0].id, email: updated.rows[0].email, password_changed: Boolean(password) } })
   } catch (error) {
     const formatted = databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+function encryptSecret(value) {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', credentialsKey, iv)
+  const ciphertext = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return {
+    ciphertext: ciphertext.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+  }
+}
+
+function decryptSecret(row) {
+  const decipher = createDecipheriv('aes-256-gcm', credentialsKey, Buffer.from(row.password_iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(row.password_tag, 'base64'))
+  return Buffer.concat([
+    decipher.update(Buffer.from(row.password_ciphertext, 'base64')),
+    decipher.final(),
+  ]).toString('utf8')
+}
+
+async function requireAdminCompany(userId, companyId) {
+  const access = await getCompanyAccess(userId, companyId)
+  if (!access?.isAdmin) throw Object.assign(new Error('Solo administradores pueden ver o administrar credenciales.'), { status: 403 })
+  return access
+}
+
+async function validateCurrentPassword(userId, password) {
+  const result = await pool.query(`select encrypted_password from auth.users where id = $1 limit 1`, [userId])
+  const valid = result.rows[0]?.encrypted_password && await bcrypt.compare(String(password || ''), result.rows[0].encrypted_password)
+  if (!valid) throw Object.assign(new Error('La contraseña de tu cuenta no coincide.'), { status: 401 })
+}
+
+app.post('/api/functions/hosting-credentials-get', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  if (!companyId) return res.status(400).json({ error: 'Empresa obligatoria.' })
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    const result = await pool.query(`
+      select hc.id, hc.servicio, hc.url, hc.usuario, hc.notas, hc.updated_at,
+             hc.password_ciphertext is not null as tiene_password,
+             coalesce(pu.nombre_completo, au.email) as actualizado_por
+        from public.hosting_credenciales hc
+        left join public.perfiles_usuarios pu on pu.user_id = hc.updated_by
+        left join auth.users au on au.id = hc.updated_by
+       where hc.empresa_id = $1 and hc.servicio = 'cpanel'
+       limit 1
+    `, [companyId])
+    const row = result.rows[0]
+    res.json({ data: row ? {
+      id: row.id,
+      servicio: row.servicio,
+      url: row.url,
+      usuario: row.usuario,
+      notas: row.notas,
+      updated_at: row.updated_at,
+      tiene_password: row.tiene_password,
+      actualizado_por: row.actualizado_por,
+    } : null })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'HOSTING_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/hosting-credentials-save', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const url = String(req.body?.url || 'https://cpanel.tecnicahidraulica.cl/').trim()
+  const usuario = String(req.body?.usuario || '').trim()
+  const password = String(req.body?.password || '')
+  const notas = String(req.body?.notas || '').trim()
+  if (!companyId) return res.status(400).json({ error: 'Empresa obligatoria.' })
+  if (!usuario) return res.status(400).json({ error: 'Ingresa el usuario de cPanel.' })
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'La URL debe comenzar con http:// o https://.' })
+
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    const current = await pool.query(`select id, password_ciphertext from public.hosting_credenciales where empresa_id = $1 and servicio = 'cpanel' limit 1`, [companyId])
+    if (!current.rowCount && !password) return res.status(400).json({ error: 'Ingresa la contraseña de cPanel para crear la credencial.' })
+    const encrypted = password ? encryptSecret(password) : null
+    const result = await pool.query(`
+      insert into public.hosting_credenciales (
+        empresa_id, servicio, url, usuario, password_ciphertext, password_iv, password_tag, notas, created_by, updated_by
+      ) values (
+        $1, 'cpanel', $2, $3, $4, $5, $6, $7, $8, $8
+      )
+      on conflict (empresa_id, servicio) do update set
+        url = excluded.url,
+        usuario = excluded.usuario,
+        password_ciphertext = coalesce(excluded.password_ciphertext, public.hosting_credenciales.password_ciphertext),
+        password_iv = coalesce(excluded.password_iv, public.hosting_credenciales.password_iv),
+        password_tag = coalesce(excluded.password_tag, public.hosting_credenciales.password_tag),
+        notas = excluded.notas,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+      returning id, servicio, url, usuario, notas, updated_at, password_ciphertext is not null as tiene_password
+    `, [companyId, url, usuario, encrypted?.ciphertext || null, encrypted?.iv || null, encrypted?.tag || null, notas || null, req.user.id])
+    res.json({ data: result.rows[0] })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'HOSTING_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
+  }
+})
+
+app.post('/api/functions/hosting-credentials-reveal', authenticate, async (req, res) => {
+  const companyId = String(req.body?.empresa_id || '')
+  const currentPassword = String(req.body?.current_password || '')
+  if (!companyId || !currentPassword) return res.status(400).json({ error: 'Empresa y contraseña actual son obligatorias.' })
+  try {
+    await requireAdminCompany(req.user.id, companyId)
+    await validateCurrentPassword(req.user.id, currentPassword)
+    const result = await pool.query(`
+      select id, url, usuario, password_ciphertext, password_iv, password_tag
+        from public.hosting_credenciales
+       where empresa_id = $1 and servicio = 'cpanel'
+       limit 1
+    `, [companyId])
+    if (!result.rowCount) return res.status(404).json({ error: 'Todavía no hay credenciales de cPanel guardadas.' })
+    const row = result.rows[0]
+    res.json({ data: { id: row.id, url: row.url, usuario: row.usuario, password: decryptSecret(row) } })
+  } catch (error) {
+    const formatted = error.status
+      ? { status: error.status, code: 'HOSTING_CREDENTIALS_ERROR', message: error.message }
+      : databaseError(error)
     res.status(formatted.status).json({ error: formatted.message, code: formatted.code })
   }
 })

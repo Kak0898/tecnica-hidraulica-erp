@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, CheckCircle2, Copy, ExternalLink, Globe2, RefreshCw, ServerCog, ShieldAlert, Unlock } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, Copy, Eye, EyeOff, ExternalLink, Globe2, KeyRound, LoaderCircle, RefreshCw, Save, ServerCog, ShieldAlert, Unlock } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
+import { useEmpresa } from '../lib/empresa'
+import { usePermisos } from '../lib/permisos'
+import { supabase } from '../lib/supabase'
 
 const CPANEL_URL = 'https://cpanel.tecnicahidraulica.cl/'
 const SUPPORT_URL = 'https://www.hosting.cl/soporte-hosting'
@@ -9,13 +12,35 @@ const DOMAIN = 'tecnicahidraulica.cl'
 const LOAD_TIMEOUT_MS = 10000
 
 type PanelMode = 'cpanel' | 'support'
+type HostingCredentials = {
+  id: string
+  url: string
+  usuario: string
+  notas?: string | null
+  tiene_password: boolean
+  updated_at?: string
+  actualizado_por?: string | null
+}
+
+const inputClass = 'mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500'
+const labelClass = 'text-sm font-black text-slate-700'
 
 export function CpanelHosting() {
+  const { activeEmpresaId } = useEmpresa()
+  const { isAdmin } = usePermisos()
   const [mode, setMode] = useState<PanelMode>('cpanel')
   const [frameKey, setFrameKey] = useState(0)
   const [loaded, setLoaded] = useState(false)
   const [timedOut, setTimedOut] = useState(false)
   const [message, setMessage] = useState('')
+  const [credentials, setCredentials] = useState<HostingCredentials | null>(null)
+  const [credentialForm, setCredentialForm] = useState({ url: CPANEL_URL, usuario: '', password: '', notas: '' })
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [revealedPassword, setRevealedPassword] = useState('')
+  const [showRevealForm, setShowRevealForm] = useState(false)
+  const [savingCredentials, setSavingCredentials] = useState(false)
+  const [loadingCredentials, setLoadingCredentials] = useState(false)
+  const [revealingCredentials, setRevealingCredentials] = useState(false)
 
   const frameUrl = useMemo(() => mode === 'cpanel' ? CPANEL_URL : SUPPORT_URL, [mode])
 
@@ -32,6 +57,30 @@ export function CpanelHosting() {
 
     return () => window.clearTimeout(timer)
   }, [frameKey, mode])
+
+  async function loadCredentials() {
+    if (!activeEmpresaId || !isAdmin) return
+    setLoadingCredentials(true)
+    const { data, error } = await supabase.functions.invoke('hosting-credentials-get', { body: { empresa_id: activeEmpresaId } })
+    if (error) {
+      setMessage(`No se pudieron cargar las credenciales: ${error.message}`)
+    } else {
+      const row = data as HostingCredentials | null
+      setCredentials(row)
+      setCredentialForm({
+        url: row?.url || CPANEL_URL,
+        usuario: row?.usuario || '',
+        password: '',
+        notas: row?.notas || '',
+      })
+      setRevealedPassword('')
+      setCurrentPassword('')
+      setShowRevealForm(false)
+    }
+    setLoadingCredentials(false)
+  }
+
+  useEffect(() => { void loadCredentials() }, [activeEmpresaId, isAdmin])
 
   async function copyDomain() {
     try {
@@ -53,6 +102,62 @@ export function CpanelHosting() {
 
   function openCpanel() {
     window.open(CPANEL_URL, '_blank', 'noopener,noreferrer')
+  }
+
+  async function saveCredentials() {
+    if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar credenciales.')
+    if (!isAdmin) return setMessage('Solo administradores pueden guardar credenciales.')
+    if (!credentialForm.usuario.trim()) return setMessage('Ingresa el usuario de cPanel.')
+    if (!credentials && !credentialForm.password) return setMessage('Ingresa la contraseña de cPanel para crear la credencial.')
+    setSavingCredentials(true)
+    const { data, error } = await supabase.functions.invoke('hosting-credentials-save', {
+      body: {
+        empresa_id: activeEmpresaId,
+        url: credentialForm.url,
+        usuario: credentialForm.usuario,
+        password: credentialForm.password,
+        notas: credentialForm.notas,
+      },
+    })
+    if (error) {
+      setMessage(`No se pudieron guardar las credenciales: ${error.message}`)
+    } else {
+      setCredentials(data as HostingCredentials)
+      setCredentialForm((current) => ({ ...current, password: '' }))
+      setRevealedPassword('')
+      setCurrentPassword('')
+      setShowRevealForm(false)
+      setMessage('Credenciales de cPanel guardadas.')
+    }
+    setSavingCredentials(false)
+  }
+
+  async function revealCredentials() {
+    if (!activeEmpresaId) return setMessage('Selecciona una empresa.')
+    if (!currentPassword) return setMessage('Ingresa la contraseña de tu cuenta para revelar la credencial.')
+    setRevealingCredentials(true)
+    const { data, error } = await supabase.functions.invoke('hosting-credentials-reveal', {
+      body: { empresa_id: activeEmpresaId, current_password: currentPassword },
+    })
+    if (error) {
+      setRevealedPassword('')
+      setMessage(`No se pudo revelar la contraseña: ${error.message}`)
+    } else {
+      setCredentialForm((current) => ({ ...current, url: data.url || current.url, usuario: data.usuario || current.usuario }))
+      setRevealedPassword(data.password || '')
+      setMessage('Contraseña revelada temporalmente. Ocúltala al terminar.')
+    }
+    setRevealingCredentials(false)
+  }
+
+  async function copyCredential(value: string, label: string) {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setMessage(`${label} copiado.`)
+    } catch {
+      setMessage(`${label}: ${value}`)
+    }
   }
 
   return <div className="space-y-5">
@@ -108,6 +213,63 @@ export function CpanelHosting() {
           </button>
         </div>
       </Card>
+
+      {isAdmin && <Card>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-slate-100 p-3 text-slate-800"><KeyRound size={24} /></div>
+            <div>
+              <h3 className="text-lg font-black text-slate-950">Credenciales de cPanel</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Solo administradores pueden guardar y ver estos datos. Para revelar la contraseña debes confirmar tu clave del ERP.</p>
+            </div>
+          </div>
+          {loadingCredentials && <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600"><LoaderCircle className="animate-spin" size={14} /> Cargando</span>}
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <label className={labelClass}>URL de acceso
+            <input className={inputClass} value={credentialForm.url} disabled={savingCredentials} onChange={(event) => setCredentialForm({ ...credentialForm, url: event.target.value })} />
+          </label>
+          <label className={labelClass}>Usuario cPanel
+            <input className={inputClass} value={credentialForm.usuario} disabled={savingCredentials} onChange={(event) => setCredentialForm({ ...credentialForm, usuario: event.target.value })} placeholder="Usuario de cPanel" />
+          </label>
+          <label className={labelClass}>Contraseña cPanel
+            <input className={inputClass} type="password" value={credentialForm.password} disabled={savingCredentials} onChange={(event) => setCredentialForm({ ...credentialForm, password: event.target.value })} placeholder={credentials?.tiene_password ? 'Dejar en blanco para mantener la actual' : 'Ingresa la contraseña'} autoComplete="new-password" />
+          </label>
+          <label className={labelClass}>Notas internas
+            <input className={inputClass} value={credentialForm.notas} disabled={savingCredentials} onChange={(event) => setCredentialForm({ ...credentialForm, notas: event.target.value })} placeholder="Proveedor, vencimiento, contacto, etc." />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={saveCredentials} disabled={savingCredentials || loadingCredentials} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {savingCredentials ? <LoaderCircle className="animate-spin" size={17} /> : <Save size={17} />} Guardar credenciales
+          </button>
+          {credentials?.tiene_password && <button onClick={() => setShowRevealForm((current) => !current)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50">
+            {showRevealForm ? <EyeOff size={17} /> : <Eye size={17} />} {showRevealForm ? 'Ocultar validación' : 'Ver contraseña'}
+          </button>}
+          {credentialForm.usuario && <button onClick={() => copyCredential(credentialForm.usuario, 'Usuario')} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50"><Copy size={17} /> Copiar usuario</button>}
+        </div>
+
+        {showRevealForm && <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <label className={labelClass}>Confirma tu contraseña del ERP
+            <input className={inputClass} type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder="Tu contraseña de inicio de sesión" autoComplete="current-password" />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={revealCredentials} disabled={revealingCredentials} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50">
+              {revealingCredentials ? <LoaderCircle className="animate-spin" size={17} /> : <Eye size={17} />} Revelar contraseña
+            </button>
+            {revealedPassword && <button onClick={() => copyCredential(revealedPassword, 'Contraseña')} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"><Copy size={17} /> Copiar contraseña</button>}
+            {revealedPassword && <button onClick={() => { setRevealedPassword(''); setCurrentPassword('') }} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50"><EyeOff size={17} /> Ocultar</button>}
+          </div>
+          {revealedPassword && <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs font-black uppercase text-slate-500">Contraseña cPanel</p>
+            <p className="mt-1 break-all font-mono text-sm font-bold text-slate-950">{revealedPassword}</p>
+          </div>}
+        </div>}
+
+        {credentials?.updated_at && <p className="mt-4 text-xs text-slate-500">Ultima actualización: {new Date(credentials.updated_at).toLocaleString('es-CL')} {credentials.actualizado_por ? `por ${credentials.actualizado_por}` : ''}</p>}
+      </Card>}
 
       <Card className="border-amber-200 bg-amber-50">
         <div className="flex items-start gap-3">
