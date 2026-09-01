@@ -63,13 +63,14 @@ export function DocumentosEmpresa() {
   const { activeEmpresaId, activeEmpresa } = useEmpresa()
   const [documents, setDocuments] = useState<CompanyDocument[]>([])
   const [form, setForm] = useState(emptyForm)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [showForm, setShowForm] = useState(false)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
   const [categoryFilter, setCategoryFilter] = useState('todas')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, fileName: '' })
   const [schemaReady, setSchemaReady] = useState(true)
   const [message, setMessage] = useState('')
 
@@ -118,46 +119,61 @@ export function DocumentosEmpresa() {
     latest: documents[0]?.fecha_emision || null,
   }), [documents])
 
+  function fileBaseName(fileName: string) {
+    const lastDot = fileName.lastIndexOf('.')
+    return (lastDot > 0 ? fileName.slice(0, lastDot) : fileName).trim() || 'Documento'
+  }
+
   async function saveDocument() {
     if (!schemaReady) return setMessage('Primero instala el módulo Archivo documental con npm run db:seed:documentos-empresa.')
     if (!activeEmpresaId) return setMessage('Selecciona una empresa antes de guardar.')
-    if (!form.nombre.trim()) return setMessage('Escribe un nombre para identificar el documento.')
     if (!form.fecha_emision) return setMessage('Ingresa la fecha en que el documento fue emitido.')
-    if (!file) return setMessage('Selecciona el PDF, imagen o archivo escaneado.')
-    if (file.size > 15 * 1024 * 1024) return setMessage('El archivo supera el máximo de 15 MB.')
+    if (!files.length) return setMessage('Selecciona uno o más PDF, imágenes o archivos escaneados.')
+    const oversized = files.find((item) => item.size > 15 * 1024 * 1024)
+    if (oversized) return setMessage(`El archivo "${oversized.name}" supera el máximo de 15 MB.`)
 
     setSaving(true)
-    let uploadedPath = ''
+    setUploadProgress({ current: 0, total: files.length, fileName: '' })
+    const uploadedPaths: string[] = []
     try {
-      const extension = extensionFrom(file.name)
-      const month = form.fecha_emision.slice(0, 7)
-      const name = `${form.fecha_emision}-${slugify(form.nombre)}-${Date.now()}.${extension}`
-      uploadedPath = `${activeEmpresaId}/${month}/${name}`
-      const upload = await supabase.storage.from(bucket).upload(uploadedPath, file, { upsert: false })
-      if (upload.error) throw upload.error
-      const { error } = await supabase.from('documentos_empresa').insert({
-        empresa_id: activeEmpresaId,
-        nombre: form.nombre.trim(),
-        fecha_emision: form.fecha_emision,
-        categoria: form.categoria.trim() || null,
-        descripcion: form.descripcion.trim() || null,
-        archivo_path: uploadedPath,
-        archivo_nombre: file.name,
-        archivo_tipo: file.type || null,
-        archivo_tamano: file.size,
-        estado: 'vigente',
-      })
+      const rows = []
+      for (const [index, item] of files.entries()) {
+        setUploadProgress({ current: index + 1, total: files.length, fileName: item.name })
+        const visibleName = files.length === 1 && form.nombre.trim() ? form.nombre.trim() : fileBaseName(item.name)
+        const extension = extensionFrom(item.name)
+        const month = form.fecha_emision.slice(0, 7)
+        const name = `${form.fecha_emision}-${slugify(visibleName)}-${Date.now()}-${index + 1}.${extension}`
+        const uploadedPath = `${activeEmpresaId}/${month}/${name}`
+        const upload = await supabase.storage.from(bucket).upload(uploadedPath, item, { upsert: false })
+        if (upload.error) throw upload.error
+        uploadedPaths.push(uploadedPath)
+        rows.push({
+          empresa_id: activeEmpresaId,
+          nombre: visibleName,
+          fecha_emision: form.fecha_emision,
+          categoria: form.categoria.trim() || null,
+          descripcion: form.descripcion.trim() || null,
+          archivo_path: uploadedPath,
+          archivo_nombre: item.name,
+          archivo_tipo: item.type || null,
+          archivo_tamano: item.size,
+          estado: 'vigente',
+        })
+      }
+      const { error } = await supabase.from('documentos_empresa').insert(rows)
       if (error) throw error
     } catch (error) {
-      if (uploadedPath) await supabase.storage.from(bucket).remove([uploadedPath])
+      if (uploadedPaths.length) await supabase.storage.from(bucket).remove(uploadedPaths)
       setSaving(false)
+      setUploadProgress({ current: 0, total: 0, fileName: '' })
       return setMessage(documentMessage(error as { code?: string; message?: string }))
     }
 
     setSaving(false)
-    setMessage('Documento guardado y disponible para abrir.')
+    setUploadProgress({ current: 0, total: 0, fileName: '' })
+    setMessage(files.length === 1 ? 'Documento guardado y disponible para abrir.' : `${files.length} documentos guardados y disponibles para buscar.`)
     setForm(emptyForm)
-    setFile(null)
+    setFiles([])
     setShowForm(false)
     await load()
   }
@@ -189,8 +205,8 @@ export function DocumentosEmpresa() {
         <p className="mt-2 max-w-3xl text-slate-600">Documentos escaneados, PDFs y respaldos generales de {activeEmpresa?.nombre || 'la empresa activa'}. La fecha corresponde a emisión del documento, no al día en que se sube.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} />Actualizar</button>
-        <button type="button" onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white"><Plus size={17} />Subir documento</button>
+        <button type="button" onClick={load} disabled={loading || saving} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} />Actualizar</button>
+        <button type="button" onClick={() => setShowForm(true)} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"><Plus size={17} />Subir documentos</button>
       </div>
     </div>
 
@@ -207,21 +223,31 @@ export function DocumentosEmpresa() {
       <div className="mb-5 flex items-start justify-between">
         <div>
           <h3 className="text-xl font-black">Subir documento</h3>
-          <p className="mt-1 text-sm text-slate-500">Usa un nombre claro para buscarlo después. El archivo queda privado para la empresa activa.</p>
+          <p className="mt-1 text-sm text-slate-500">Puedes elegir varios archivos. Si subes múltiples, cada documento se guardará usando el nombre original del archivo para buscarlo después.</p>
         </div>
-        <button type="button" onClick={() => setShowForm(false)} className="rounded-lg bg-slate-100 p-2"><X size={18} /></button>
+        <button type="button" onClick={() => setShowForm(false)} disabled={saving} className="rounded-lg bg-slate-100 p-2 disabled:opacity-50"><X size={18} /></button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className={`${labelClass} xl:col-span-2`}>Nombre visible *<input value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} className={inputClass} placeholder="Factura compresor, contrato proveedor, guía despacho..." /></label>
-        <label className={labelClass}>Fecha emisión *<input type="date" value={form.fecha_emision} onChange={(event) => setForm({ ...form, fecha_emision: event.target.value })} className={inputClass} /></label>
-        <label className={labelClass}>Categoría<input value={form.categoria} onChange={(event) => setForm({ ...form, categoria: event.target.value })} className={inputClass} placeholder="Factura, contrato, guía..." /></label>
-        <label className={`${labelClass} md:col-span-2`}>Archivo *<input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} className={`${inputClass} text-sm`} /></label>
-        <label className={`${labelClass} md:col-span-2`}>Descripción<textarea value={form.descripcion} onChange={(event) => setForm({ ...form, descripcion: event.target.value })} className={`${inputClass} min-h-24 resize-y`} placeholder="Detalle interno opcional" /></label>
+        <label className={`${labelClass} xl:col-span-2`}>Nombre visible <span className="font-normal text-slate-500">(solo para 1 archivo)</span><input value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} disabled={saving || files.length > 1} className={inputClass} placeholder="Si subes varios, se usará el nombre de cada archivo" /></label>
+        <label className={labelClass}>Fecha emisión *<input type="date" value={form.fecha_emision} onChange={(event) => setForm({ ...form, fecha_emision: event.target.value })} disabled={saving} className={inputClass} /></label>
+        <label className={labelClass}>Categoría<input value={form.categoria} onChange={(event) => setForm({ ...form, categoria: event.target.value })} disabled={saving} className={inputClass} placeholder="Factura, contrato, guía..." /></label>
+        <label className={`${labelClass} md:col-span-2`}>Archivos *<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={saving} className={`${inputClass} text-sm`} /></label>
+        <label className={`${labelClass} md:col-span-2`}>Descripción común<textarea value={form.descripcion} onChange={(event) => setForm({ ...form, descripcion: event.target.value })} disabled={saving} className={`${inputClass} min-h-24 resize-y`} placeholder="Detalle interno opcional para todos los archivos de esta carga" /></label>
       </div>
-      {file && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900"><p>{file.name} · {formatBytes(file.size)}</p></div>}
+      {files.length > 0 && <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+        <p>{files.length === 1 ? 'Archivo seleccionado' : `${files.length} archivos seleccionados`}</p>
+        <div className="mt-2 max-h-32 overflow-auto rounded-lg bg-white/70 p-2 text-xs text-blue-950">
+          {files.map((item) => <div key={`${item.name}-${item.size}-${item.lastModified}`} className="flex justify-between gap-3 border-b border-blue-100 py-1 last:border-b-0"><span className="truncate">{item.name}</span><span className="shrink-0">{formatBytes(item.size)}</span></div>)}
+        </div>
+      </div>}
+      {saving && uploadProgress.total > 0 && <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+        <div className="flex items-center justify-between gap-3 font-black"><span>Guardando documentos</span><span>{uploadProgress.current} / {uploadProgress.total}</span></div>
+        <div className="mt-2 h-3 overflow-hidden rounded-full bg-emerald-100"><div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }} /></div>
+        <p className="mt-2 truncate text-xs font-semibold">{uploadProgress.fileName}</p>
+      </div>}
       <button type="button" onClick={saveDocument} disabled={saving} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50">
         {saving ? <LoaderCircle size={17} className="animate-spin" /> : <Save size={17} />}
-        {saving ? 'Guardando...' : 'Guardar documento'}
+        {saving ? 'Guardando...' : files.length > 1 ? 'Guardar documentos' : 'Guardar documento'}
       </button>
     </Card>}
 
