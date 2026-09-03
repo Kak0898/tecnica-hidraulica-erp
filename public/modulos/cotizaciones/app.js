@@ -143,6 +143,7 @@ let previewMode = 'actual';
 let workflowMode = INITIAL_MODE;
 let availableClients = [];
 let activeCompanyId = '';
+let clientSearch = '';
 
 function loadCurrent(){
   let autosave = null;
@@ -468,6 +469,34 @@ function isQuoteDoc(doc=state){return doc?.documentKind === 'cotizacion' || Bool
 function documentKindOf(doc){return isQuoteDoc(doc) ? 'cotizacion' : 'presupuesto'}
 function budgetDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'presupuesto')}
 function quoteDocuments(){return saved.filter(item=>documentKindOf(item.doc) === 'cotizacion')}
+function normalizedSearch(value){
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function filteredClients(){
+  const term = normalizedSearch(clientSearch);
+  if (!term) return availableClients;
+  return availableClients.filter(client=>{
+    const contactText = clientContacts(client).map(contact=>`${contact.nombre || ''} ${contact.email || ''} ${contact.telefono || ''}`).join(' ');
+    return normalizedSearch(`${clientDisplayName(client)} ${client.rut || ''} ${client.email || ''} ${client.telefono || ''} ${client.direccion || ''} ${contactText}`).includes(term);
+  });
+}
+function sameClientDocument(doc, client=registeredClient(state.clienteId)){
+  if (!doc) return false;
+  if (client?.id && doc.clienteId && String(doc.clienteId) === String(client.id)) return true;
+  const clientRut = normalizedSearch(client?.rut || state.rut);
+  const docRut = normalizedSearch(doc.rut);
+  if (clientRut && docRut && clientRut === docRut) return true;
+  const selectedName = normalizedSearch(clientDisplayName(client) || state.cliente);
+  const docName = normalizedSearch(doc.cliente);
+  return Boolean(selectedName && docName && selectedName === docName);
+}
+function clientPreviousDocuments(){
+  if (!state.clienteId && !String(state.cliente || state.rut || '').trim()) return [];
+  return saved
+    .filter(item=>sameClientDocument(item.doc))
+    .sort((a,b)=>String(b.doc.savedAt || '').localeCompare(String(a.doc.savedAt || '')))
+    .slice(0, 12);
+}
 function quoteIdentifier(doc, id){
   const series = doc?.serieCotizacion || 'TH';
   const date = doc?.fecha || 'sin fecha';
@@ -557,6 +586,10 @@ function selectRegisteredClient(value){
   persist();
   render({preserveScroll:true});
 }
+function setClientSearch(value){
+  clientSearch = value;
+  render({preserveScroll:true});
+}
 function selectRegisteredContact(value){
   const contact = clientContacts().find(item=>String(item.id)===String(value));
   if (!contact) return;
@@ -566,6 +599,130 @@ function selectRegisteredContact(value){
   state.email = contact.email || state.email || '';
   markDirty();
   persist();
+  render({preserveScroll:true});
+}
+function cloneDocumentAsNew(source, targetKind=documentKindOf(source)){
+  const cloned = JSON.parse(JSON.stringify(source || {}));
+  const kind = targetKind === 'presupuesto' ? 'presupuesto' : 'cotizacion';
+  delete cloned.preSnapshot;
+  return {
+    ...defaultDoc,
+    ...cloned,
+    id:null,
+    documentKind:kind,
+    tipo:kind === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
+    estado:kind === 'cotizacion' ? 'cotizacion_borrador' : 'pre_cotizacion',
+    numero:'',
+    preNumero:'',
+    numeroReservado:false,
+    origenDocumento:'sistema',
+    importacionArchivo:'',
+    importacionUid:null,
+    fecha:today,
+    vcto:'',
+    correspondePresupuesto:false,
+    presupuestoOrigenId:null,
+    presupuestoOrigenNumero:'',
+    savedAt:null,
+    savedInSupabase:false,
+    dirty:true,
+    observaciones: cloned.observaciones || brand.observacionesDefault || EJEMPLO_NOTAS,
+    condiciones: cloned.condiciones || brand.condicionesDefault || ''
+  };
+}
+function duplicateSavedDoc(id, targetKind='same'){
+  const found = saved.find(item=>String(item.id) === String(id));
+  if (!found) {
+    saveStatus = {type:'bad', text:'No encontré el documento anterior para copiarlo.'};
+    render({preserveScroll:true});
+    return;
+  }
+  const sourceKind = documentKindOf(found.doc);
+  const kind = targetKind === 'same' ? sourceKind : targetKind;
+  workflowMode = kind === 'presupuesto' ? 'presupuesto' : 'cotizacion';
+  previewMode = 'actual';
+  clearAutosave();
+  state = cloneDocumentAsNew(found.doc, workflowMode);
+  normalizeReferencias(state);
+  applyBrandToDoc(state);
+  persist();
+  saveStatus = {type:'warn', text:`Documento copiado desde ${sourceKind === 'cotizacion' ? 'cotización' : 'presupuesto'} anterior. Revisa los datos y guarda para crear uno nuevo.`};
+  actionMessage = 'La copia no modifica el documento original.';
+  render();
+}
+function csvCell(value) {
+  const text = value == null ? '' : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+function downloadText(filename, content, type='text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+function exportRecord(item){
+  const doc = item.doc || {};
+  const t = isQuoteDoc(doc) ? totalsFromDoc(doc) : totalsPreOrden(doc);
+  return {
+    id: item.id || doc.id || '',
+    tipo: documentKindOf(doc),
+    numero: doc.numero || '',
+    pre_numero: doc.preNumero || '',
+    serie_cotizacion: doc.serieCotizacion || 'TH',
+    origen_documento: doc.origenDocumento || 'sistema',
+    importacion_archivo: doc.importacionArchivo || '',
+    fecha_emision: doc.fecha || '',
+    fecha_vcto: doc.vcto || '',
+    cliente_id: doc.clienteId || '',
+    cliente_nombre: doc.cliente || '',
+    cliente_contacto: doc.contacto || '',
+    cliente_rut: doc.rut || '',
+    cliente_direccion: doc.direccion || '',
+    cliente_giro: doc.giro || '',
+    cliente_comuna: doc.comuna || '',
+    cliente_ciudad: doc.ciudad || '',
+    cliente_telefono: doc.telefono || '',
+    cliente_email: doc.email || '',
+    vendedor_nombre: doc.vendedorNombre || '',
+    vendedor_email: doc.vendedorEmail || '',
+    moneda: currentCurrency(doc),
+    referencia: referenciasTextoFromDoc(doc),
+    observaciones: doc.observaciones || '',
+    garantia: doc.garantia || '',
+    condiciones: doc.condiciones || '',
+    neto: roundAmount(t.neto, doc),
+    iva: roundAmount(t.iva, doc),
+    total: roundAmount(t.total, doc),
+    items_json: JSON.stringify(doc.referencias || []),
+    data_json: JSON.stringify(doc)
+  };
+}
+function referenciasTextoFromDoc(doc){
+  return (doc.referencias || []).map(ref=>ref.texto).filter(ref=>String(ref || '').trim()).join('\n');
+}
+function exportDocuments(kind='cotizaciones', format='csv'){
+  const docs = kind === 'todo' ? saved : quoteDocuments();
+  if (!docs.length) {
+    actionMessage = kind === 'todo' ? 'No hay documentos para exportar.' : 'No hay cotizaciones para exportar.';
+    render({preserveScroll:true});
+    return;
+  }
+  const records = docs.map(exportRecord);
+  const date = new Date().toISOString().slice(0, 10);
+  const base = kind === 'todo' ? `documentos-erp-${date}` : `cotizaciones-erp-${date}`;
+  if (format === 'json') {
+    downloadText(`${base}.json`, JSON.stringify(records, null, 2), 'application/json;charset=utf-8');
+  } else {
+    const headers = Object.keys(records[0]);
+    const csv = [headers.join(';'), ...records.map(row=>headers.map(header=>csvCell(row[header])).join(';'))].join('\n');
+    downloadText(`${base}.csv`, csv, 'text/csv;charset=utf-8');
+  }
+  actionMessage = `Exportados ${records.length} documento(s) en ${format.toUpperCase()}.`;
   render({preserveScroll:true});
 }
 function addItem(){addRefItem(0)}
@@ -1031,7 +1188,7 @@ async function loadSavedDocs(){
       .from('cotizacion_documentos')
       .select('*')
       .order('updated_at', { ascending:false })
-      .limit(50);
+      .limit(5000);
     if (error) throw error;
     saved = (data || []).map(row => ({id: row.id, doc: docFromDb(row), source:'supabase'}));
     localStorage.setItem('th_saved', JSON.stringify(saved));
@@ -1281,7 +1438,9 @@ function render(renderOptions={}){
   const exportDisabled = !canExport() || savingDoc;
   const isFinal = isQuoteDoc();
   const availableBudgets = budgetDocuments();
-  const visibleSaved = isFinal ? quoteDocuments() : availableBudgets;
+  const visibleSaved = (isFinal ? quoteDocuments() : availableBudgets).slice(0, 80);
+  const clientsForSelect = filteredClients().slice(0, 120);
+  const previousClientDocs = clientPreviousDocuments();
   const docLabel = isFinal ? 'COTIZACIÓN' : 'PRESUPUESTO';
   const displayNumber = loadingNumber
     ? '...'
@@ -1348,9 +1507,23 @@ function render(renderOptions={}){
 
       <div class="section-title">${isFinal ? 'Cliente cotización final' : 'Cliente presupuesto'}</div>
       <div class="registered-client-box">
-        <div class="field"><label>Usar cliente registrado</label><select onchange="selectRegisteredClient(this.value)"><option value="manual" ${!state.clienteId ? 'selected' : ''}>Ingreso manual / cliente nuevo</option>${availableClients.map(client=>`<option value="${esc(client.id)}" ${String(state.clienteId)===String(client.id)?'selected':''}>${esc(clientDisplayName(client))}${client.rut ? ` · ${esc(client.rut)}` : ''}</option>`).join('')}</select></div>
+        <div class="field"><label>Buscar cliente anterior</label><input value="${esc(clientSearch)}" oninput="setClientSearch(this.value)" placeholder="Nombre, RUT, correo o teléfono"></div>
+        <div class="field"><label>Usar cliente registrado</label><select onchange="selectRegisteredClient(this.value)"><option value="manual" ${!state.clienteId ? 'selected' : ''}>Ingreso manual / cliente nuevo</option>${clientsForSelect.map(client=>`<option value="${esc(client.id)}" ${String(state.clienteId)===String(client.id)?'selected':''}>${esc(clientDisplayName(client))}${client.rut ? ` · ${esc(client.rut)}` : ''}</option>`).join('')}</select></div>
         ${state.clienteId && clientContacts().length ? `<div class="field"><label>Contacto registrado</label><select onchange="selectRegisteredContact(this.value)">${clientContacts().map(contact=>`<option value="${esc(contact.id)}" ${String(state.contactoId)===String(contact.id)?'selected':''}>${esc(contact.nombre)}${contact.cargo ? ` · ${esc(contact.cargo)}` : ''}</option>`).join('')}</select></div>` : ''}
         <p class="small">Al elegir un cliente se completan automáticamente razón social, RUT, dirección, contacto, teléfono y correo. Puedes ajustarlos solo para este documento.</p>
+        ${previousClientDocs.length ? `
+          <div class="client-history">
+            <b>Documentos anteriores de este cliente</b>
+            ${previousClientDocs.map(item=>`
+              <div class="client-history-row">
+                <span>${esc(isQuoteDoc(item.doc) ? quoteIdentifier(item.doc, '') : 'PRESUPUESTO ' + (item.doc.preNumero || 'SIN N°'))}<small>${esc(item.doc.savedAt || '')}</small></span>
+                <div class="btns">
+                  <button class="ghost" onclick="loadDoc('${esc(item.id)}')">Abrir original</button>
+                  <button class="primary" onclick="duplicateSavedDoc('${esc(item.id)}')">Copiar como nuevo</button>
+                </div>
+              </div>`).join('')}
+          </div>
+        ` : ''}
       </div>
       <div class="field"><label>Señor(es) *</label><input class="client-name-input" aria-required="true" value="${esc(state.cliente)}" oninput="setSilent('cliente',this.value)" onchange="render({preserveScroll:true})" placeholder="Cliente"></div>
       <div class="grid">
@@ -1453,7 +1626,21 @@ function render(renderOptions={}){
       </div>
 
       <div class="section-title">${isFinal ? 'Cotizaciones guardadas' : 'Presupuestos guardados'}</div>
-      <div class="saved-list">${visibleSaved.map(s=>`<div class="saved"><b>${esc(isQuoteDoc(s.doc) ? quoteIdentifier(s.doc, s.id) : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente || 'Sin cliente')} · ${esc(s.doc.savedAt||'')}</span>${isQuoteDoc(s.doc) ? `<span class="saved-origin">${s.doc.origenDocumento === 'importado' ? `Importada${s.doc.importacionArchivo ? ` desde ${esc(s.doc.importacionArchivo)}` : ''}` : s.doc.correspondePresupuesto ? `Presupuesto: ${esc(s.doc.presupuestoOrigenNumero || 'vinculado')}` : 'Sin presupuesto asociado'}</span>` : ''}<div class="btns"><button class="ghost" onclick="loadDoc('${s.id}')">Abrir</button><button class="danger" onclick="deleteSaved('${s.id}')">Borrar</button></div></div>`).join('')||`<p class="small">Aún no hay ${isFinal ? 'cotizaciones' : 'presupuestos'} guardados.</p>`}</div>
+      ${isFinal ? `
+        <div class="export-box">
+          <div>
+            <b>Exportación para migración</b>
+            <p>Descarga todas las cotizaciones cargadas desde PostgreSQL. CSV para planillas, JSON para traspasar datos completos e ítems.</p>
+          </div>
+          <div class="btns">
+            <button class="primary" onclick="exportDocuments('cotizaciones','csv')">Exportar cotizaciones CSV</button>
+            <button class="ghost" onclick="exportDocuments('cotizaciones','json')">Exportar cotizaciones JSON</button>
+            <button class="ghost" onclick="exportDocuments('todo','json')">Exportar todo JSON</button>
+          </div>
+        </div>
+      ` : ''}
+      <div class="saved-list">${visibleSaved.map(s=>`<div class="saved"><b>${esc(isQuoteDoc(s.doc) ? quoteIdentifier(s.doc, s.id) : 'PRESUPUESTO ' + (s.doc.preNumero || 'SIN N°'))}</b><span>${esc(s.doc.cliente || 'Sin cliente')} · ${esc(s.doc.savedAt||'')}</span>${isQuoteDoc(s.doc) ? `<span class="saved-origin">${s.doc.origenDocumento === 'importado' ? `Importada${s.doc.importacionArchivo ? ` desde ${esc(s.doc.importacionArchivo)}` : ''}` : s.doc.correspondePresupuesto ? `Presupuesto: ${esc(s.doc.presupuestoOrigenNumero || 'vinculado')}` : 'Sin presupuesto asociado'}</span>` : ''}<div class="btns"><button class="ghost" onclick="loadDoc('${esc(s.id)}')">Abrir</button><button class="primary" onclick="duplicateSavedDoc('${esc(s.id)}')">Copiar como nueva</button><button class="danger" onclick="deleteSaved('${esc(s.id)}')">Borrar</button></div></div>`).join('')||`<p class="small">Aún no hay ${isFinal ? 'cotizaciones' : 'presupuestos'} guardados.</p>`}</div>
+      ${((isFinal ? quoteDocuments() : availableBudgets).length > visibleSaved.length) ? `<p class="small">Mostrando los últimos ${visibleSaved.length}. La exportación usa todos los documentos cargados.</p>` : ''}
     </aside>
 
     <section class="preview-wrap">

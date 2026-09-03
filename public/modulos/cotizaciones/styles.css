@@ -44,6 +44,12 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .origin-summary.independent{background:#fff8e6;color:#7c4a03;border:1px solid #f3d58c}
 .registered-client-box{margin-bottom:12px;border:1px solid #cdd9e9;border-radius:12px;padding:12px;background:#f8fbff}
 .registered-client-box .field:last-of-type{margin-bottom:5px}
+.client-history{margin-top:10px;border-top:1px solid #d6e2f2;padding-top:10px;display:grid;gap:8px}
+.client-history>b{display:block;color:var(--azul);font-size:13px}
+.client-history-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid #dbe4f0;border-radius:10px;background:white;padding:9px}
+.client-history-row span{display:block;min-width:0;font-size:12px;font-weight:800;color:#263244;line-height:1.3}
+.client-history-row small{display:block;margin-top:2px;color:#667085;font-size:10px;font-weight:700}
+.client-history-row .btns{margin-top:0;justify-content:flex-end}
 .seller-info-box{margin:16px 0;border:1px solid #a9c7ee;border-radius:14px;padding:14px;background:linear-gradient(145deg,#f2f7ff,#fff)}
 .seller-info-title{font-size:14px;font-weight:900;color:var(--azul);margin-bottom:10px}
 .seller-rules{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -110,6 +116,9 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .obs{border:1px solid var(--borde);padding:10px;white-space:pre-line;min-height:125px;line-height:1.25}
 .totals{width:100%;border-collapse:collapse}.totals td{border:1px solid var(--borde);padding:8px}.totals td:first-child{font-weight:800;background:#f6f8fb}.total-final td{font-size:15px;font-weight:900;color:var(--azul);background:#eef4ff!important}
 .bank{margin-top:18px;border-top:2px solid var(--azul);padding-top:10px;font-weight:700;line-height:1.25}.small{font-size:11px;color:#5b6573}.saved-list{margin-top:12px;display:grid;gap:8px}.saved{border:1px solid var(--borde);border-radius:10px;padding:10px;background:#fbfcfe}.saved b{display:block;color:var(--azul)}
+.export-box{margin:10px 0 12px;border:1px solid #bdd0ee;border-radius:12px;background:#f5f9ff;padding:12px}
+.export-box b{display:block;color:var(--azul);font-size:13px}
+.export-box p{margin:3px 0 0;color:#526176;font-size:11px;line-height:1.35}
 .preorder-sheet{padding:11mm 12mm;font-size:10.7px}
 .preorder-header{display:grid;grid-template-columns:45% 55%;gap:12px;align-items:start;border-bottom:3px solid var(--azul);padding-bottom:8px;margin-bottom:12px}
 .preorder-brand{line-height:1.18;text-align:left;font-size:10.5px}
@@ -177,7 +186,7 @@ button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .budget-sign b{display:block;font-size:14px;text-decoration:underline}
 @media(max-width:1500px){.app{grid-template-columns:minmax(560px,620px) minmax(780px,1fr);gap:18px}.panel{padding:18px}.sheet{transform-origin:top center;transform:scale(.96);margin-bottom:-36px}}
 @media(max-width:1200px){body{overflow-y:auto}.app{grid-template-columns:1fr;height:auto;min-height:100vh;overflow:visible}.panel{max-height:none;overflow:visible}.preview-wrap{max-height:none;position:static}.sheet{width:210mm;min-height:auto;transform:none;margin-bottom:0}.sheet-header{grid-template-columns:48% 52%}.quote-block{border-left:1px solid #d7dee9;border-radius:0;padding:3px 0 0 16px}.date-block-under{padding:0}.brand-logo{max-width:235px;max-height:82px}}
-@media(max-width:700px){.app{padding:10px}.grid,.item-row .grid,.technical-grid,.spec-row,.fixed-spec-row,.cargo-row,.seller-rules{grid-template-columns:1fr}.panel{padding:14px}.sheet{width:100%;overflow:hidden}.sheet-header,.preorder-header,.preorder-info-grid,.preorder-bottom,.preorder-two-cols,.budget-top-info,.budget-bottom{grid-template-columns:1fr}.preorder-doc{text-align:left}.preorder-mini-grid{margin-left:0}.quote-block{border:1px solid #d7dee9;border-radius:12px;padding:10px}.quote-number{font-size:46px}.quote-number.pre-number{font-size:30px}.budget-header .quote-number.pre-number{font-size:30px}.preorder-number{font-size:30px}.brand-logo{max-width:220px;max-height:78px}.obs-totals{grid-template-columns:1fr}.budget-specs{grid-template-columns:1fr 8px 1fr}}
+@media(max-width:700px){.app{padding:10px}.grid,.item-row .grid,.technical-grid,.spec-row,.fixed-spec-row,.cargo-row,.seller-rules,.client-history-row{grid-template-columns:1fr}.panel{padding:14px}.client-history-row .btns{justify-content:flex-start}.sheet{width:100%;overflow:hidden}.sheet-header,.preorder-header,.preorder-info-grid,.preorder-bottom,.preorder-two-cols,.budget-top-info,.budget-bottom{grid-template-columns:1fr}.preorder-doc{text-align:left}.preorder-mini-grid{margin-left:0}.quote-block{border:1px solid #d7dee9;border-radius:12px;padding:10px}.quote-number{font-size:46px}.quote-number.pre-number{font-size:30px}.budget-header .quote-number.pre-number{font-size:30px}.preorder-number{font-size:30px}.brand-logo{max-width:220px;max-height:78px}.obs-totals{grid-template-columns:1fr}.budget-specs{grid-template-columns:1fr 8px 1fr}}
 @media print{
   @page{size:A4;margin:0}
   html,body{height:auto!important;min-height:0!important;overflow:visible!important}
