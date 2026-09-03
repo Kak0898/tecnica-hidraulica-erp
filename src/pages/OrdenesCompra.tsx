@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Ban, Copy, Eye, Pencil, Plus, Printer, RefreshCw, Save, Search, ShoppingCart, Trash2 } from 'lucide-react'
+import { Ban, Copy, Eye, Pencil, Plus, Printer, RefreshCw, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
@@ -65,6 +65,16 @@ const emptyForm = {
   observaciones: '',
   estado: 'borrador' as OrdenCompra['estado'],
   items: [{ ...blankItem }],
+}
+
+const emptyProviderForm = {
+  razon_social: '',
+  rut: '',
+  contacto_nombre: '',
+  email: '',
+  telefono: '',
+  direccion: '',
+  servicios: '',
 }
 
 function clean(value: string) {
@@ -139,7 +149,7 @@ function companyLines(company: ReturnType<typeof useEmpresa>['activeEmpresa']) {
 
 function buildPrintHtml(order: OrdenCompra, company: ReturnType<typeof useEmpresa>['activeEmpresa']) {
   const provider = order.proveedor_snapshot || order.empresas_asociadas || {}
-  const rows = Array.from({ length: Math.max(12, order.items.length) }).map((_, index) => {
+  const rows = Array.from({ length: Math.max(10, order.items.length) }).map((_, index) => {
     const item = order.items[index]
     return `<tr>
       <td>${esc(item?.cantidad || '')}</td>
@@ -159,16 +169,17 @@ function buildPrintHtml(order: OrdenCompra, company: ReturnType<typeof useEmpres
 <title>${esc(order.numero)} - Orden de compra</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#e2e8f0;font-family:Arial,Helvetica,sans-serif;color:#0f172a}
-.toolbar{padding:16px;text-align:center}.toolbar button{border:0;border-radius:8px;background:#0f172a;color:white;padding:10px 18px;font-weight:700}
-.sheet{width:216mm;min-height:279mm;margin:0 auto 24px;background:white;padding:12mm;border:1px solid #cbd5e1}
-.top{display:grid;grid-template-columns:1fr 66mm;gap:10mm;align-items:start;border-bottom:2px solid #0f172a;padding-bottom:7mm}
-.brand{display:grid;grid-template-columns:26mm 1fr;gap:5mm;align-items:start}.brand img{width:24mm;height:24mm;object-fit:contain}.brand h1{margin:0 0 2mm;font-size:18px;text-transform:uppercase}.brand p{margin:1mm 0;font-size:11px;font-weight:700;text-transform:uppercase}
-.title{text-align:right}.title h2{margin:0;font-size:24px;letter-spacing:1px}.title strong{display:block;margin-top:3mm;font-size:18px}.meta{margin-top:3mm;font-size:12px;line-height:1.5}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin:7mm 0}.box{border:1.5px solid #334155;border-radius:6px;padding:4mm}.box h3{margin:0 0 3mm;font-size:12px;letter-spacing:.8px;text-transform:uppercase}.field{display:grid;grid-template-columns:31mm 1fr;gap:2mm;margin:2mm 0;font-size:12px}.label{font-weight:700}.value{min-height:16px;border-bottom:1px solid #94a3b8}
-table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #334155;padding:2.2mm;font-size:11px;vertical-align:top}th{background:#f1f5f9;text-align:center;text-transform:uppercase}.qty{width:24mm}.code{width:34mm}.money{width:33mm}.num{text-align:right;white-space:nowrap}td{height:9mm}
-.totals{margin-left:auto;margin-top:5mm;width:72mm}.totals div{display:grid;grid-template-columns:1fr 34mm;border:1px solid #334155;border-top:0}.totals div:first-child{border-top:1px solid #334155}.totals span,.totals b{padding:2.3mm;font-size:12px}.totals span{text-align:right;border-left:1px solid #334155}.totals .grand{background:#0f172a;color:white}
-.notes{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:7mm}.note{min-height:28mm;white-space:pre-wrap;font-size:12px;line-height:1.45}.signs{display:grid;grid-template-columns:1fr 1fr;gap:45mm;margin-top:18mm;text-align:center;font-size:12px}.signs div{border-top:1px solid #334155;padding-top:2mm}
+body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#111827}
+.toolbar{padding:16px;text-align:center}.toolbar button{border:0;border-radius:6px;background:#0f172a;color:white;padding:10px 18px;font-weight:700}
+.sheet{width:216mm;min-height:279mm;margin:0 auto 24px;background:white;padding:10mm 12mm;border:1px solid #cbd5e1}
+.top{display:grid;grid-template-columns:1fr 58mm;gap:8mm;align-items:start}
+.brand{display:grid;grid-template-columns:31mm 1fr;gap:5mm;align-items:start}.brand img{width:30mm;max-height:24mm;object-fit:contain}.brand h1{margin:0;font-size:18px;text-transform:uppercase;font-weight:900}.brand p{margin:1mm 0 0;font-size:10.5px;font-weight:700;text-transform:uppercase;line-height:1.2}
+.quote-block{border:1px solid #d5dbea;border-radius:8px;padding:3.5mm;text-align:center;color:#0f2a66}.quote-label{font-size:11px;font-weight:800;text-transform:uppercase}.quote-number{font-size:25px;font-weight:900;line-height:1.05}.date-block{margin-top:3mm;text-align:left;color:#111827}.date-row{display:grid;grid-template-columns:26mm 1fr;align-items:center;gap:2mm;margin-top:2mm;font-size:10.5px}.date-value{border:1px solid #cbd5e1;border-radius:5px;min-height:7mm;padding:1.5mm;text-align:center}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin:7mm 0}.info-table{width:100%;border-collapse:collapse;table-layout:fixed}.info-table th{background:#0f2a66;color:white;text-align:left;font-size:11px;padding:2mm}.info-table td{border:1px solid #cbd5e1;padding:2mm;font-size:11px;min-height:7mm}.info-table .label{width:30mm;background:#f8fafc;font-weight:800;color:#334155}
+.block-title{margin:5mm 0 2mm;background:#0f2a66;color:white;padding:2mm 3mm;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px}
+.main-table{width:100%;border-collapse:collapse;table-layout:fixed}.main-table th,.main-table td{border:1px solid #94a3b8;padding:2mm;font-size:11px;vertical-align:top}.main-table th{background:#eef2ff;color:#0f2a66;text-transform:uppercase}.main-table td{height:8.5mm}.qty{width:18mm}.code{width:30mm}.money{width:30mm}.num{text-align:right;white-space:nowrap}
+.bottom{display:grid;grid-template-columns:1fr 72mm;gap:7mm;margin-top:5mm}.notes{border:1px solid #cbd5e1;min-height:34mm;padding:3mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.totals{width:100%;border-collapse:collapse}.totals td{border:1px solid #94a3b8;padding:2.3mm;font-size:12px}.totals td:first-child{font-weight:800;background:#f8fafc}.totals .grand td{background:#0f2a66;color:white;font-weight:900;font-size:13px}
+.terms{margin-top:5mm;border:1px solid #cbd5e1;padding:3mm;min-height:22mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.signs{display:grid;grid-template-columns:1fr 1fr;gap:20mm;margin-top:18mm;text-align:center;font-size:11px}.sign{border-top:1px solid #334155;padding-top:2mm}.sign b{display:block;font-size:12px}.sign span{display:block;color:#475569;margin-top:1mm}
 @media print{body{background:white}.toolbar{display:none}.sheet{border:0;margin:0;width:auto;min-height:auto;page-break-after:always}thead{display:table-header-group}}
 </style>
 </head>
@@ -177,27 +188,50 @@ table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px so
 <main class="sheet">
   <section class="top">
     <div class="brand">${logo}<div>${lines}</div></div>
-    <div class="title"><h2>ORDEN DE COMPRA</h2><strong>${esc(order.numero)}</strong><div class="meta">Fecha emisión: ${esc(formatDate(order.fecha_emision))}<br>Fecha entrega: ${esc(formatDate(order.fecha_entrega))}</div></div>
+    <section class="quote-block">
+      <div class="quote-label">ORDEN DE COMPRA N°</div>
+      <div class="quote-number">${esc(order.numero)}</div>
+      <div class="date-block">
+        <div class="date-row"><b>Fecha Emisión:</b><div class="date-value">${esc(formatDate(order.fecha_emision))}</div></div>
+        <div class="date-row"><b>Fecha Entrega:</b><div class="date-value">${esc(formatDate(order.fecha_entrega))}</div></div>
+        <div class="date-row"><b>R.U.T.:</b><div class="date-value">${esc(company?.rut || '')}</div></div>
+      </div>
+    </section>
   </section>
-  <section class="grid">
-    <div class="box"><h3>Proveedor</h3>
-      <div class="field"><span class="label">Razón social</span><span class="value">${esc(provider.razon_social)}</span></div>
-      <div class="field"><span class="label">R.U.T.</span><span class="value">${esc(provider.rut)}</span></div>
-      <div class="field"><span class="label">Dirección</span><span class="value">${esc(provider.direccion)}</span></div>
-      <div class="field"><span class="label">Contacto</span><span class="value">${esc(provider.contacto_nombre)}</span></div>
-      <div class="field"><span class="label">Teléfono</span><span class="value">${esc(provider.telefono)}</span></div>
-      <div class="field"><span class="label">Correo</span><span class="value">${esc(provider.email)}</span></div>
-    </div>
-    <div class="box"><h3>Datos de compra</h3>
-      <div class="field"><span class="label">Estado</span><span class="value">${esc(order.estado)}</span></div>
-      <div class="field"><span class="label">Moneda</span><span class="value">${esc(order.moneda || 'CLP')}</span></div>
-      <div class="field"><span class="label">Condiciones</span><span class="value">${esc(order.condiciones)}</span></div>
-    </div>
+
+  <section class="info">
+    <table class="info-table">
+      <tr><th colspan="2">DATOS PROVEEDOR</th></tr>
+      <tr><td class="label">Señor(es)</td><td>${esc(provider.razon_social)}</td></tr>
+      <tr><td class="label">Contacto</td><td>${esc(provider.contacto_nombre)}</td></tr>
+      <tr><td class="label">R.U.T.</td><td>${esc(provider.rut)}</td></tr>
+      <tr><td class="label">Dirección</td><td>${esc(provider.direccion)}</td></tr>
+      <tr><td class="label">E-mail</td><td>${esc(provider.email)}</td></tr>
+      <tr><td class="label">Fono</td><td>${esc(provider.telefono)}</td></tr>
+    </table>
+    <table class="info-table">
+      <tr><th colspan="2">DATOS ORDEN DE COMPRA</th></tr>
+      <tr><td class="label">N° OC</td><td>${esc(order.numero)}</td></tr>
+      <tr><td class="label">Razón social</td><td>${esc(company?.razon_social || company?.nombre || '')}</td></tr>
+      <tr><td class="label">R.U.T.</td><td>${esc(company?.rut || '')}</td></tr>
+      <tr><td class="label">Moneda</td><td>${esc(order.moneda || 'CLP')}</td></tr>
+      <tr><td class="label">Estado</td><td>${esc(order.estado)}</td></tr>
+      <tr><td class="label">Fecha</td><td>${esc(formatDate(order.fecha_emision))}</td></tr>
+    </table>
   </section>
-  <table><thead><tr><th class="qty">Cantidad</th><th class="code">Código</th><th>Descripción</th><th class="money">Valor unit.</th><th class="money">Total</th></tr></thead><tbody>${rows}</tbody></table>
-  <section class="totals"><div><b>Subtotal neto</b><span>${esc(money(order.subtotal))}</span></div><div><b>IVA 19%</b><span>${esc(money(order.iva))}</span></div><div class="grand"><b>Total</b><span>${esc(money(order.total))}</span></div></section>
-  <section class="notes"><div><b>Observaciones</b><div class="note">${esc(order.observaciones)}</div></div><div><b>Condiciones</b><div class="note">${esc(order.condiciones)}</div></div></section>
-  <section class="signs"><div>Solicitado por</div><div>Autorizado por</div></section>
+
+  <div class="block-title">Detalle de compra</div>
+  <table class="main-table"><thead><tr><th class="qty">Cant.</th><th class="code">Código</th><th>Detalle</th><th class="money">Valor Unitario</th><th class="money">Valor Total</th></tr></thead><tbody>${rows}</tbody></table>
+  <section class="bottom">
+    <div><div class="block-title">Observaciones</div><div class="notes">${esc(order.observaciones)}</div></div>
+    <table class="totals"><tr><td>Neto</td><td class="num">${esc(money(order.subtotal))}</td></tr><tr><td>IVA 19%</td><td class="num">${esc(money(order.iva))}</td></tr><tr class="grand"><td>Total</td><td class="num">${esc(money(order.total))}</td></tr></table>
+  </section>
+  <div class="block-title">Condiciones</div>
+  <section class="terms">${esc(order.condiciones)}</section>
+  <section class="signs">
+    <div class="sign"><b>Rafael Espinoza Toledo</b><span>Gerente de Operaciones</span></div>
+    <div class="sign"><b>Domingo Toro Segura</b><span>Gerente General</span></div>
+  </section>
 </main>
 </body>
 </html>`
@@ -228,6 +262,10 @@ function Preview({ order, company }: { order: OrdenCompra; company: ReturnType<t
         <div className="grid grid-cols-2 border-x border-b border-slate-500"><b className="p-2">IVA 19%</b><span className="border-l border-slate-500 p-2 text-right">{money(order.iva)}</span></div>
         <div className="grid grid-cols-2 bg-slate-950 text-white"><b className="p-2">Total</b><span className="p-2 text-right">{money(order.total)}</span></div>
       </div>
+      <div className="mt-10 grid grid-cols-2 gap-16 text-center text-xs">
+        <div className="border-t border-slate-600 pt-2"><b>Rafael Espinoza Toledo</b><p className="text-slate-500">Gerente de Operaciones</p></div>
+        <div className="border-t border-slate-600 pt-2"><b>Domingo Toro Segura</b><p className="text-slate-500">Gerente General</p></div>
+      </div>
     </div>
   </div>
 }
@@ -239,6 +277,8 @@ export function OrdenesCompra() {
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState('')
   const [previewId, setPreviewId] = useState('')
+  const [showProviderForm, setShowProviderForm] = useState(false)
+  const [providerForm, setProviderForm] = useState(emptyProviderForm)
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -318,6 +358,34 @@ export function OrdenesCompra() {
 
   function removeItem(index: number) {
     setForm((current) => ({ ...current, items: current.items.length === 1 ? [{ ...blankItem }] : current.items.filter((_, itemIndex) => itemIndex !== index) }))
+  }
+
+  async function saveProvider() {
+    if (!activeEmpresaId) return setMessage('Selecciona una empresa activa antes de crear el proveedor.')
+    if (!providerForm.razon_social.trim()) return setMessage('Ingresa la razón social del proveedor.')
+    setSaving(true)
+    const { data, error } = await supabase.from('empresas_asociadas').insert({
+      empresa_id: activeEmpresaId,
+      tipo: 'proveedor',
+      razon_social: providerForm.razon_social.trim(),
+      rut: clean(providerForm.rut),
+      contacto_nombre: clean(providerForm.contacto_nombre),
+      email: clean(providerForm.email),
+      telefono: clean(providerForm.telefono),
+      direccion: clean(providerForm.direccion),
+      servicios: clean(providerForm.servicios),
+      estado: 'activa',
+    }).select('*')
+    setSaving(false)
+    if (error) return setMessage(moduleMessage(error))
+    const created = data?.[0] as Proveedor | undefined
+    if (created) {
+      setProviders((current) => [...current, created].sort((a, b) => a.razon_social.localeCompare(b.razon_social, 'es')))
+      setForm((current) => ({ ...current, proveedor_id: created.id }))
+    }
+    setProviderForm(emptyProviderForm)
+    setShowProviderForm(false)
+    setMessage('Proveedor creado y seleccionado para esta OC.')
   }
 
   function edit(order: OrdenCompra, duplicate = false) {
@@ -424,7 +492,30 @@ export function OrdenesCompra() {
             <label className={labelClass}>Fecha entrega<input type="date" value={form.fecha_entrega} onChange={(event) => setForm({ ...form, fecha_entrega: event.target.value })} className={inputClass} /></label>
             <label className={`${labelClass} sm:col-span-2`}>Proveedor<select value={form.proveedor_id} onChange={(event) => setForm({ ...form, proveedor_id: event.target.value })} className={inputClass}><option value="">Selecciona proveedor</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.razon_social} · {provider.rut || 'sin RUT'}</option>)}</select></label>
           </div>
-          {!providers.length && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">Primero agrega proveedores activos en Empresas asociadas.</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {!providers.length && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">No hay proveedores activos todavía.</p>}
+            <button type="button" onClick={() => setShowProviderForm((current) => !current)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-black text-blue-700">
+              {showProviderForm ? <X size={16} /> : <Plus size={16} />}
+              {showProviderForm ? 'Cerrar proveedor rápido' : 'Agregar proveedor rápido'}
+            </button>
+          </div>
+
+          {showProviderForm && <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-black text-slate-950">Proveedor rápido</h4>
+              <button type="button" onClick={() => setShowProviderForm(false)} className="rounded-lg bg-white p-2 text-slate-500"><X size={16} /></button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={`${labelClass} sm:col-span-2`}>Razón social *<input value={providerForm.razon_social} onChange={(event) => setProviderForm({ ...providerForm, razon_social: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>RUT<input value={providerForm.rut} onChange={(event) => setProviderForm({ ...providerForm, rut: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>Contacto<input value={providerForm.contacto_nombre} onChange={(event) => setProviderForm({ ...providerForm, contacto_nombre: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>Correo<input type="email" value={providerForm.email} onChange={(event) => setProviderForm({ ...providerForm, email: event.target.value })} className={inputClass} /></label>
+              <label className={labelClass}>Teléfono<input value={providerForm.telefono} onChange={(event) => setProviderForm({ ...providerForm, telefono: event.target.value })} className={inputClass} /></label>
+              <label className={`${labelClass} sm:col-span-2`}>Dirección<input value={providerForm.direccion} onChange={(event) => setProviderForm({ ...providerForm, direccion: event.target.value })} className={inputClass} /></label>
+              <label className={`${labelClass} sm:col-span-2`}>Servicios o productos<textarea value={providerForm.servicios} onChange={(event) => setProviderForm({ ...providerForm, servicios: event.target.value })} className={`${inputClass} min-h-20 resize-y`} /></label>
+            </div>
+            <button type="button" onClick={saveProvider} disabled={saving} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"><Save size={16} />Guardar proveedor</button>
+          </div>}
 
           <div className="mt-5 space-y-3">
             <div className="flex items-center justify-between"><h4 className="font-black">Detalle</h4><button type="button" onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700"><Plus size={16} />Línea</button></div>

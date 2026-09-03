@@ -23,7 +23,7 @@ const assignableModules = MODULE_GROUPS.flatMap((group) => group.modules.map((mo
 
 const presets: Array<{ label: string; modules: ModuleKey[] }> = [
   { label: 'RR.HH. y pagos', modules: ['rrhh_personas', 'rrhh_contratos', 'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos'] },
-  { label: 'Comercial', modules: ['dashboard', 'clientes', 'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'crm', 'whatsapp'] },
+  { label: 'Comercial', modules: ['dashboard', 'clientes', 'presupuestos', 'cotizaciones', 'ordenes_compra', 'comprobantes_comisiones', 'publicaciones', 'crm', 'whatsapp'] },
   { label: 'Operaciones', modules: ['dashboard', 'ordenes', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'auditorias', 'importar_excel'] },
   { label: 'Marketing', modules: ['dashboard', 'google_ads', 'publicaciones', 'crm', 'whatsapp'] },
 ]
