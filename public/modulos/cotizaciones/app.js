@@ -243,7 +243,7 @@ async function loadBranding(){
       ...DEFAULT_BRAND,
       nombre: empresa.nombre || DEFAULT_BRAND.nombre,
       razonSocial: empresa.razon_social || empresa.nombre || DEFAULT_BRAND.razonSocial,
-      descripcion: empresa.descripcion_corta || DEFAULT_BRAND.descripcion,
+      descripcion: empresa.descripcion_corta || '',
       rubroLinea: empresa.descripcion_corta || DEFAULT_BRAND.rubroLinea,
       rut: empresa.rut || DEFAULT_BRAND.rut,
       email: empresa.email || DEFAULT_BRAND.email,
@@ -795,10 +795,11 @@ function brandContactLine(){
 function renderBrandBlock(){
   const logo = brandLogo();
   const contact = brandContactLine();
+  const description = brandDescription();
   return `
     <div class="brand-block">
       <div class="brand-name">${esc(brandName()).toUpperCase()}</div>
-      <div class="brand-desc">${esc(brandDescription()).toUpperCase()}</div>
+      ${description ? `<div class="brand-desc">${esc(description).toUpperCase()}</div>` : ''}
       ${brandAddressLine() ? `<div>${esc(brandAddressLine()).toUpperCase()}</div>` : ''}
       ${contact ? `<div class="brand-contact">${contact}</div>` : ''}
       ${logo ? `<img class="brand-logo" src="${esc(logo)}" alt="Logo ${esc(brandName())}">` : '<div class="brand-logo brand-logo-empty">Sin logo</div>'}
