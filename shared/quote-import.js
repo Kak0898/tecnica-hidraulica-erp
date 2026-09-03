@@ -2,7 +2,7 @@ const HEADER_ALIASES = Object.freeze({
   numero: ['numero', 'nro', 'n cotizacion', 'numero cotizacion', 'n° cotizacion', 'folio', 'cotizacion'],
   serie: ['serie', 'serie cotizacion', 'sucursal', 'origen'],
   fecha_emision: ['fecha emision', 'fecha de emision', 'fecha cotizacion', 'fecha'],
-  fecha_vcto: ['fecha vencimiento', 'fecha de vencimiento', 'vencimiento'],
+  fecha_vcto: ['fecha vencimiento', 'fecha de vencimiento', 'vencimiento', 'vcto'],
   cliente_nombre: ['cliente', 'razon social', 'señor(es)', 'senor(es)', 'empresa cliente'],
   cliente_rut: ['rut cliente', 'rut', 'rut empresa'],
   cliente_contacto: ['contacto', 'nombre contacto'],
@@ -21,7 +21,7 @@ const HEADER_ALIASES = Object.freeze({
   referencia: ['referencia', 'oc', 'orden compra'],
   observaciones: ['observaciones', 'notas', 'comentarios'],
   tipo_documento: ['tipo', 'tipo documento', 'documentkind', 'document kind', 'documento'],
-  pre_numero: ['pre numero', 'pre_numero', 'numero presupuesto', 'n presupuesto', 'n° presupuesto', 'presupuesto'],
+  pre_numero: ['pre numero', 'pre_numero', 'prenumero', 'preNumero', 'numero presupuesto', 'n presupuesto', 'n° presupuesto', 'presupuesto'],
 })
 
 function normalizedKey(value) {
@@ -80,6 +80,11 @@ function safeJson(value) {
   catch { return null }
 }
 
+function jsonValue(value) {
+  if (typeof value === 'string') return safeJson(value)
+  return value
+}
+
 function field(row, name) {
   const aliases = HEADER_ALIASES[name] || [name]
   for (const alias of [name, ...aliases]) {
@@ -105,6 +110,23 @@ function decimal(value) {
   else if ((source.match(/\./g) || []).length > 1) source = source.replace(/\./g, '')
   const parsed = Number(source)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function subtotalItem(item) {
+  return decimal(item?.cantidad || 1) * decimal(item?.precio || item?.precio_unitario || item?.valor_unitario || 0) * (1 - decimal(item?.dscto || item?.descuento || 0) / 100)
+}
+
+function totalFromReferences(references) {
+  if (!Array.isArray(references)) return 0
+  return references.reduce((sum, reference) => {
+    const items = Array.isArray(reference?.items) ? reference.items : []
+    return sum + items.reduce((itemSum, item) => itemSum + subtotalItem(item), 0)
+  }, 0)
+}
+
+function totalFromPreOrden(preOrden) {
+  const cargos = Array.isArray(preOrden?.cargos) ? preOrden.cargos : []
+  return cargos.reduce((sum, item) => sum + decimal(item?.cantidad || 1) * decimal(item?.precio || 0), 0)
 }
 
 function integer(value) {
@@ -157,7 +179,11 @@ export function normalizeQuoteImportRow(source, context = {}) {
     ? safeJson(source.data_json)
     : typeof source?.data === 'object' && source.data
       ? source.data
-      : null
+      : source && typeof source === 'object'
+        ? source
+        : null
+  const parsedReferences = Array.isArray(jsonValue(sourceData?.referencias)) ? jsonValue(sourceData.referencias) : []
+  const parsedPreOrden = jsonValue(sourceData?.preOrden) && typeof jsonValue(sourceData.preOrden) === 'object' ? jsonValue(sourceData.preOrden) : null
   const row = indexedRow({
     ...(source || {}),
     moneda: source?.moneda ?? sourceData?.moneda,
@@ -175,9 +201,12 @@ export function normalizeQuoteImportRow(source, context = {}) {
   if (!fechaEmision) errors.push('fecha de emisión inválida')
   if (!clienteNombre) errors.push('cliente vacío')
 
+  const referencesTotal = totalFromReferences(parsedReferences)
+  const preOrdenTotal = totalFromPreOrden(parsedPreOrden)
   let neto = Math.max(0, decimal(field(row, 'neto')))
   let iva = Math.max(0, decimal(field(row, 'iva')))
   let total = Math.max(0, decimal(field(row, 'total')))
+  if (!neto && (referencesTotal || preOrdenTotal)) neto = referencesTotal + preOrdenTotal
   if (!neto && total) neto = total / 1.19
   if (!iva && total && neto) iva = Math.max(0, total - neto)
   if (!total && (neto || iva)) total = neto + iva
@@ -190,7 +219,7 @@ export function normalizeQuoteImportRow(source, context = {}) {
   const moneda = currency(field(row, 'moneda'))
   const serieCotizacion = series(field(row, 'serie'), fechaEmision)
   const preNumber = documentKind === 'presupuesto'
-    ? `IMP-${serieCotizacion}-${String(explicitPreNumber || numero).replace(/[^A-Za-z0-9-]/g, '-')}-${String(context.rowNumber || '0').padStart(4, '0')}`
+    ? `IMP-${String(explicitPreNumber || numero).replace(/[^A-Za-z0-9-]/g, '-')}-${String(context.rowNumber || '0').padStart(4, '0')}`
     : null
   const vendedorNombre = text(field(row, 'vendedor_nombre'), 200)
   const vendedorEmail = text(field(row, 'vendedor_email'), 250).toLowerCase()
@@ -208,7 +237,7 @@ export function normalizeQuoteImportRow(source, context = {}) {
       dscto: 0,
     }],
   }]
-  const references = Array.isArray(sourceData?.referencias) && sourceData.referencias.length ? sourceData.referencias : importedReferences
+  const references = parsedReferences.length ? parsedReferences : importedReferences
 
   return {
     valid: errors.length === 0,
@@ -245,6 +274,8 @@ export function normalizeQuoteImportRow(source, context = {}) {
       items: references,
       data: {
         ...(sourceData || {}),
+        referencias: references,
+        preOrden: parsedPreOrden || sourceData?.preOrden,
         documentKind,
         tipo: documentKind === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
         estado: documentKind === 'cotizacion' ? 'cotizacion_emitida' : 'pre_cotizacion',

@@ -52,7 +52,7 @@ test('normaliza presupuesto importado sin ocupar folio final de cotización', ()
   assert.equal(result.valid, true)
   assert.equal(result.data.document_kind, 'presupuesto')
   assert.equal(result.data.numero, null)
-  assert.match(result.data.pre_numero, /^IMP-IMP-2026-11879-0004$/)
+  assert.match(result.data.pre_numero, /^IMP-11879-0004$/)
   assert.equal(result.data.data.numeroReservado, false)
 })
 
@@ -74,4 +74,40 @@ test('lee export JSON con data_json y conserva referencias completas', () => {
   assert.equal(result.data.document_kind, 'cotizacion')
   assert.equal(result.data.numero, 11879)
   assert.equal(result.data.items[0].texto, 'Cambio kit sellos')
+})
+
+test('lee export directo de TH/Vercel con preNumero y preOrden', () => {
+  const result = normalizeQuoteImportRow({
+    tipo: 'PRE-COTIZACIÓN',
+    preNumero: 'PRE-11939',
+    fecha: '2026-09-02',
+    moneda: 'UF',
+    cliente: 'COMACO SERVICIOS LOGISTICOS SPA',
+    contacto: 'Sr. Franklin Salazar',
+    rut: '99.587.850-K',
+    referencias: [{ texto: '', items: [{ cantidad: '1', precio: '20', descripcion: '' }] }],
+    preOrden: { cargos: [{ detalle: 'Traslado Ida Y retorno dentro de Santiago', cantidad: 1, precio: '6' }] },
+  }, { importUid: '82', fileName: 'th-documentos-2026-09-03.json', rowNumber: 1 })
+
+  assert.equal(result.valid, true)
+  assert.equal(result.data.document_kind, 'presupuesto')
+  assert.equal(result.data.pre_numero, 'IMP-PRE-11939-0001')
+  assert.equal(result.data.folio_original, 'PRE-11939')
+  assert.equal(result.data.neto, 26)
+})
+
+test('lee export CSV de TH/Vercel con referencias como JSON en texto', () => {
+  const result = normalizeQuoteImportRow({
+    tipo: 'PRE-COTIZACIÓN',
+    preNumero: 'PRE-11939',
+    fecha: '2026-09-02',
+    moneda: 'UF',
+    cliente: 'COMACO SERVICIOS LOGISTICOS SPA',
+    referencias: JSON.stringify([{ texto: '', items: [{ cantidad: '1', precio: '20', descripcion: '' }] }]),
+    preOrden: JSON.stringify({ cargos: [{ detalle: 'Traslado Ida Y retorno dentro de Santiago', cantidad: 1, precio: '6' }] }),
+  }, { importUid: 'csv:1', fileName: 'th-documentos-2026-09-03.csv', rowNumber: 1 })
+
+  assert.equal(result.valid, true)
+  assert.equal(result.data.document_kind, 'presupuesto')
+  assert.equal(result.data.neto, 26)
 })
