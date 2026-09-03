@@ -39,3 +39,39 @@ test('etiqueta documentos homónimos con serie, fecha e ID interno', () => {
     'N° 44 · IMP-2025 · 2025-01-10 · ID 91',
   )
 })
+
+test('normaliza presupuesto importado sin ocupar folio final de cotización', () => {
+  const result = normalizeQuoteImportRow({
+    tipo: 'presupuesto',
+    pre_numero: '11879',
+    Fecha: '01-08-2026',
+    Cliente: 'Cliente Presupuesto',
+    Total: '$1.190.000',
+  }, { importUid: 'vercel:presupuesto:11879', fileName: 'presupuestos.json', rowNumber: 4 })
+
+  assert.equal(result.valid, true)
+  assert.equal(result.data.document_kind, 'presupuesto')
+  assert.equal(result.data.numero, null)
+  assert.match(result.data.pre_numero, /^IMP-IMP-2026-11879-0004$/)
+  assert.equal(result.data.data.numeroReservado, false)
+})
+
+test('lee export JSON con data_json y conserva referencias completas', () => {
+  const result = normalizeQuoteImportRow({
+    numero: '11879',
+    serie_cotizacion: 'TH',
+    fecha_emision: '2026-08-03',
+    cliente_nombre: 'Cliente JSON',
+    total: '119000',
+    data_json: JSON.stringify({
+      documentKind: 'cotizacion',
+      moneda: 'CLP',
+      referencias: [{ texto: 'Cambio kit sellos', items: [{ descripcion: 'Cambio kit sellos cilindro', cantidad: 1, precio: 100000 }] }],
+    }),
+  }, { importUid: 'json:11879', fileName: 'cotizaciones.json', rowNumber: 1 })
+
+  assert.equal(result.valid, true)
+  assert.equal(result.data.document_kind, 'cotizacion')
+  assert.equal(result.data.numero, 11879)
+  assert.equal(result.data.items[0].texto, 'Cambio kit sellos')
+})

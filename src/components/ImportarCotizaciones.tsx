@@ -15,6 +15,39 @@ async function fileFingerprint(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`.replace(/[^a-zA-Z0-9-]/g, '-')
 }
 
+function rowsFromJsonPayload(payload: any): Record<string, any>[] {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.cotizaciones)) return payload.cotizaciones
+  if (Array.isArray(payload?.presupuestos)) return payload.presupuestos
+  if (Array.isArray(payload?.documentos)) return payload.documentos
+  if (Array.isArray(payload?.rows)) return payload.rows
+  if (Array.isArray(payload?.data)) return payload.data
+  return []
+}
+
+async function readImportRows(file: File) {
+  const fingerprint = await fileFingerprint(file)
+  if (file.name.toLowerCase().endsWith('.json')) {
+    const payload = JSON.parse(await file.text())
+    const rows = rowsFromJsonPayload(payload)
+    return {
+      fingerprint,
+      sheetName: 'json',
+      firstRow: 1,
+      rows,
+    }
+  }
+  const sheets = await readExcelWorkbook(file)
+  const sheet = findExcelSheet(sheets, ['cotizaciones', 'cotizacion', 'presupuestos', 'presupuesto', 'documentos'], 0)
+  if (!sheet) throw new Error('El archivo no contiene ninguna hoja.')
+  return {
+    fingerprint,
+    sheetName: sheet.name,
+    firstRow: 2,
+    rows: rowsFromExcelMatrix(sheet.matrix),
+  }
+}
+
 export function ImportarCotizaciones({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState('')
@@ -30,14 +63,12 @@ export function ImportarCotizaciones({ onClose, onImported }: { onClose: () => v
     setMessage('')
     setFileName(file.name)
     try {
-      const [sheets, fingerprint] = await Promise.all([readExcelWorkbook(file), fileFingerprint(file)])
-      const sheet = findExcelSheet(sheets, ['cotizaciones', 'cotizacion'], 0)
-      if (!sheet) throw new Error('El Excel no contiene ninguna hoja.')
-      const sourceRows = rowsFromExcelMatrix(sheet.matrix)
-      const prepared = sourceRows.map((source, index) => normalizeQuoteImportRow(source, {
-        importUid: `${fingerprint}:${sheet.name}:${index + 2}`,
+      const source = await readImportRows(file)
+      if (!source.rows.length) throw new Error(file.name.toLowerCase().endsWith('.json') ? 'El JSON no contiene una lista reconocible de documentos.' : 'El archivo no contiene filas.')
+      const prepared = source.rows.map((row, index) => normalizeQuoteImportRow(row, {
+        importUid: String(row?.importacion_uid || row?.id || row?.uuid || `${source.fingerprint}:${source.sheetName}:${index + source.firstRow}`),
         fileName: file.name,
-        rowNumber: index + 2,
+        rowNumber: index + source.firstRow,
       }))
       const validRows: PreparedQuote[] = prepared.filter((item) => item.valid).map((item) => ({ ...item.data, source_row: item.sourceRow }))
       const invalidRows = prepared.filter((item) => !item.valid).map((item) => ({ row: item.sourceRow, errors: item.errors }))
@@ -50,7 +81,7 @@ export function ImportarCotizaciones({ onClose, onImported }: { onClose: () => v
       setInvalid(invalidRows)
       setRepeatedFolios([...folioCounts.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0))
       setMessage(validRows.length
-        ? `${validRows.length} cotización(es) listas. Los folios repetidos se conservarán como documentos distintos.`
+        ? `${validRows.length} documento(s) listo(s). Los folios repetidos se conservarán como documentos distintos.`
         : 'No se encontraron filas válidas. Revisa número, fecha, cliente y monto.')
     } catch (error) {
       setRows([])
@@ -71,7 +102,7 @@ export function ImportarCotizaciones({ onClose, onImported }: { onClose: () => v
       setSaving(false)
       return
     }
-    setMessage(`${Number(data?.processed || rows.length)} cotización(es) importadas correctamente. Ya están disponibles en el listado y en comisiones.`)
+    setMessage(`${Number(data?.processed || rows.length)} documento(s) importado(s) correctamente. Ya están disponibles en el listado.`)
     setRows([])
     setFileName('')
     if (inputRef.current) inputRef.current.value = ''
@@ -84,17 +115,17 @@ export function ImportarCotizaciones({ onClose, onImported }: { onClose: () => v
       <div className="flex items-start gap-3">
         <div className="rounded-xl bg-blue-100 p-3 text-blue-700"><FileSpreadsheet size={22} /></div>
         <div>
-          <h3 className="text-lg font-black text-slate-950">Importar cotizaciones históricas</h3>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">El número visible puede repetirse. El sistema distingue cada documento por serie, fecha e ID interno y evita reimportar la misma fila del mismo archivo.</p>
+          <h3 className="text-lg font-black text-slate-950">Importar cotizaciones y presupuestos históricos</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">Acepta Excel, CSV y JSON. El número visible puede repetirse; el sistema distingue cada documento por serie, fecha e ID interno y evita reimportar la misma fila del mismo archivo.</p>
         </div>
       </div>
       <button type="button" onClick={onClose} className="self-end rounded-lg bg-slate-100 p-2 text-slate-600 lg:self-start" aria-label="Cerrar importación"><X size={18} /></button>
     </div>
 
     <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
-      <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void prepare(file) }} className="min-w-0 rounded-xl border border-slate-300 bg-white p-2.5 text-sm" />
+      <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv,.json,application/json,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void prepare(file) }} className="min-w-0 rounded-xl border border-slate-300 bg-white p-2.5 text-sm" />
       <a href="/formatos/formato-importacion-cotizaciones.xlsx" download className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800"><Download size={17} />Descargar formato</a>
-      <button type="button" onClick={importRows} disabled={reading || saving || !rows.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{reading || saving ? <LoaderCircle size={17} className="animate-spin" /> : <UploadCloud size={17} />}{reading ? 'Revisando...' : saving ? 'Importando...' : 'Importar cotizaciones'}</button>
+      <button type="button" onClick={importRows} disabled={reading || saving || !rows.length} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">{reading || saving ? <LoaderCircle size={17} className="animate-spin" /> : <UploadCloud size={17} />}{reading ? 'Revisando...' : saving ? 'Importando...' : 'Importar documentos'}</button>
     </div>
 
     {(fileName || message) && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">

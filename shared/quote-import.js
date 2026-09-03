@@ -20,6 +20,8 @@ const HEADER_ALIASES = Object.freeze({
   vendedor_email: ['correo vendedor', 'email vendedor', 'vendedor email'],
   referencia: ['referencia', 'oc', 'orden compra'],
   observaciones: ['observaciones', 'notas', 'comentarios'],
+  tipo_documento: ['tipo', 'tipo documento', 'documentkind', 'document kind', 'documento'],
+  pre_numero: ['pre numero', 'pre_numero', 'numero presupuesto', 'n presupuesto', 'n° presupuesto', 'presupuesto'],
 })
 
 function normalizedKey(value) {
@@ -33,7 +35,39 @@ function normalizedKey(value) {
 }
 
 function indexedRow(row) {
-  return Object.entries(row || {}).reduce((result, [key, value]) => {
+  const source = row || {}
+  const data = typeof source.data_json === 'string'
+    ? safeJson(source.data_json)
+    : typeof source.data === 'object' && source.data
+      ? source.data
+      : null
+  const merged = data
+    ? {
+        ...data,
+        ...source,
+        numero: source.numero ?? data.numero,
+        pre_numero: source.pre_numero ?? data.preNumero,
+        serie: source.serie_cotizacion ?? data.serieCotizacion,
+        fecha_emision: source.fecha_emision ?? data.fecha,
+        fecha_vcto: source.fecha_vcto ?? data.vcto,
+        cliente_nombre: source.cliente_nombre ?? data.cliente,
+        cliente_contacto: source.cliente_contacto ?? data.contacto,
+        cliente_rut: source.cliente_rut ?? data.rut,
+        cliente_direccion: source.cliente_direccion ?? data.direccion,
+        cliente_giro: source.cliente_giro ?? data.giro,
+        cliente_comuna: source.cliente_comuna ?? data.comuna,
+        cliente_ciudad: source.cliente_ciudad ?? data.ciudad,
+        cliente_telefono: source.cliente_telefono ?? data.telefono,
+        cliente_email: source.cliente_email ?? data.email,
+        vendedor_nombre: source.vendedor_nombre ?? data.vendedorNombre,
+        vendedor_email: source.vendedor_email ?? data.vendedorEmail,
+        referencia: source.referencia ?? data.referencia,
+        observaciones: source.observaciones ?? data.observaciones,
+        moneda: source.moneda ?? data.moneda,
+        tipo_documento: source.tipo ?? data.documentKind ?? data.tipo,
+      }
+    : source
+  return Object.entries(merged).reduce((result, [key, value]) => {
     const normalized = normalizedKey(key)
     const hasValue = value !== undefined && value !== null && String(value).trim() !== ''
     if (hasValue || result[normalized] === undefined) result[normalized] = value
@@ -41,9 +75,14 @@ function indexedRow(row) {
   }, {})
 }
 
+function safeJson(value) {
+  try { return JSON.parse(value) }
+  catch { return null }
+}
+
 function field(row, name) {
   const aliases = HEADER_ALIASES[name] || [name]
-  for (const alias of aliases) {
+  for (const alias of [name, ...aliases]) {
     const value = row[normalizedKey(alias)]
     if (value !== undefined && value !== null && String(value).trim() !== '') return value
   }
@@ -114,15 +153,25 @@ function series(value, date) {
 }
 
 export function normalizeQuoteImportRow(source, context = {}) {
+  const sourceData = typeof source?.data_json === 'string'
+    ? safeJson(source.data_json)
+    : typeof source?.data === 'object' && source.data
+      ? source.data
+      : null
   const row = indexedRow({
     ...(source || {}),
-    moneda: source?.moneda ?? source?.data?.moneda,
+    moneda: source?.moneda ?? sourceData?.moneda,
   })
   const numero = integer(field(row, 'numero'))
+  const explicitPreNumber = text(field(row, 'pre_numero'), 80)
   const fechaEmision = isoDate(field(row, 'fecha_emision'))
   const clienteNombre = text(field(row, 'cliente_nombre'), 250)
+  const rawKind = normalizedKey(field(row, 'tipo_documento') || sourceData?.documentKind || sourceData?.tipo || source?.tipo)
+  const isBudget = rawKind.includes('presupuesto') || rawKind.includes('pre cotizacion') || rawKind === 'pre'
+  const documentKind = isBudget ? 'presupuesto' : 'cotizacion'
   const errors = []
-  if (!numero || numero < 1) errors.push('número de cotización inválido')
+  if (documentKind === 'cotizacion' && (!numero || numero < 1)) errors.push('número de cotización inválido')
+  if (documentKind === 'presupuesto' && !explicitPreNumber && (!numero || numero < 1)) errors.push('número de presupuesto inválido')
   if (!fechaEmision) errors.push('fecha de emisión inválida')
   if (!clienteNombre) errors.push('cliente vacío')
 
@@ -140,6 +189,9 @@ export function normalizeQuoteImportRow(source, context = {}) {
 
   const moneda = currency(field(row, 'moneda'))
   const serieCotizacion = series(field(row, 'serie'), fechaEmision)
+  const preNumber = documentKind === 'presupuesto'
+    ? `IMP-${serieCotizacion}-${String(explicitPreNumber || numero).replace(/[^A-Za-z0-9-]/g, '-')}-${String(context.rowNumber || '0').padStart(4, '0')}`
+    : null
   const vendedorNombre = text(field(row, 'vendedor_nombre'), 200)
   const vendedorEmail = text(field(row, 'vendedor_email'), 250).toLowerCase()
   const observaciones = text(field(row, 'observaciones'), 3000)
@@ -156,13 +208,17 @@ export function normalizeQuoteImportRow(source, context = {}) {
       dscto: 0,
     }],
   }]
+  const references = Array.isArray(sourceData?.referencias) && sourceData.referencias.length ? sourceData.referencias : importedReferences
 
   return {
     valid: errors.length === 0,
     errors,
     sourceRow: rowNumber,
     data: {
-      numero,
+      document_kind: documentKind,
+      numero: documentKind === 'cotizacion' ? numero : null,
+      pre_numero: preNumber,
+      folio_original: explicitPreNumber || (numero ? String(numero) : ''),
       serie_cotizacion: serieCotizacion,
       origen_documento: 'importado',
       importacion_uid: importUid,
@@ -186,13 +242,16 @@ export function normalizeQuoteImportRow(source, context = {}) {
       neto,
       iva,
       total,
-      items: importedReferences,
+      items: references,
       data: {
-        documentKind: 'cotizacion',
-        tipo: 'COTIZACIÓN',
-        estado: 'cotizacion_emitida',
-        numero: numero ? String(numero) : '',
-        numeroReservado: Boolean(numero),
+        ...(sourceData || {}),
+        documentKind,
+        tipo: documentKind === 'cotizacion' ? 'COTIZACIÓN' : 'PRESUPUESTO',
+        estado: documentKind === 'cotizacion' ? 'cotizacion_emitida' : 'pre_cotizacion',
+        numero: documentKind === 'cotizacion' && numero ? String(numero) : '',
+        preNumero: preNumber || '',
+        folioOriginal: explicitPreNumber || (numero ? String(numero) : ''),
+        numeroReservado: documentKind === 'cotizacion' && Boolean(numero),
         fecha: fechaEmision,
         vcto: fechaVcto,
         moneda,
@@ -207,9 +266,9 @@ export function normalizeQuoteImportRow(source, context = {}) {
         email: text(field(row, 'cliente_email'), 250).toLowerCase(),
         vendedorNombre,
         vendedorEmail,
-        referencia,
-        referencias: importedReferences,
-        observaciones,
+        referencia: referencia || sourceData?.referencia || '',
+        referencias: references,
+        observaciones: observaciones || sourceData?.observaciones || '',
         serieCotizacion,
         origenDocumento: 'importado',
         importedFrom: text(context.fileName, 255),
@@ -221,9 +280,10 @@ export function normalizeQuoteImportRow(source, context = {}) {
 }
 
 export function quoteImportLabel(quote) {
-  const number = quote?.numero || 'SIN-NÚMERO'
+  const isBudget = quote?.document_kind === 'presupuesto' || quote?.data?.documentKind === 'presupuesto'
+  const number = isBudget ? (quote?.pre_numero || quote?.data?.preNumero || quote?.folio_original || 'SIN-NÚMERO') : (quote?.numero || 'SIN-NÚMERO')
   const seriesValue = quote?.serie_cotizacion || quote?.data?.serieCotizacion || 'TH'
   const date = quote?.fecha_emision || quote?.data?.fecha || 'sin fecha'
   const id = quote?.id ? ` · ID ${quote.id}` : ''
-  return `N° ${number} · ${seriesValue} · ${date}${id}`
+  return `${isBudget ? 'PRESUPUESTO' : 'N°'} ${number} · ${seriesValue} · ${date}${id}`
 }

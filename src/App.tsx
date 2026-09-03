@@ -70,7 +70,7 @@ function DocumentosComerciales({ modo }: { modo: 'presupuesto' | 'cotizacion' })
      </p>
     </div>
     <div className="flex flex-wrap items-center justify-end gap-2">
-     {!isPresupuesto && <button type="button" onClick={() => setShowImporter((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white"><FileSpreadsheet size={17} />Importar cotizaciones</button>}
+     {!isPresupuesto && <button type="button" onClick={() => setShowImporter((current) => !current)} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white"><FileSpreadsheet size={17} />Importar históricos</button>}
      <div className="rounded bg-slate-100 px-3 py-2 text-sm text-slate-700">{userEmail || 'Sin sesión'}</div>
     </div>
    </div>

@@ -729,8 +729,8 @@ async function sellerById(client, companyId, sellerId) {
 app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
   const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : []
   const fileName = String(req.body?.file_name || '').trim().slice(0, 255)
-  if (!sourceRows.length) return res.status(400).json({ error: 'El archivo no contiene cotizaciones válidas para importar.' })
-  if (sourceRows.length > 1000) return res.status(400).json({ error: 'Importa un máximo de 1.000 cotizaciones por archivo.' })
+  if (!sourceRows.length) return res.status(400).json({ error: 'El archivo no contiene documentos válidos para importar.' })
+  if (sourceRows.length > 1000) return res.status(400).json({ error: 'Importa un máximo de 1.000 documentos por archivo.' })
 
   let client
   try {
@@ -768,6 +768,10 @@ app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
 
     for (const item of normalized) {
       const row = item.data
+      const documentKind = row.document_kind === 'presupuesto' ? 'presupuesto' : 'cotizacion'
+      const documentType = documentKind === 'presupuesto' ? 'PRESUPUESTO' : 'COTIZACIÓN'
+      const documentState = documentKind === 'presupuesto' ? 'pre_cotizacion' : 'cotizacion_emitida'
+      const emitidaAtSql = documentKind === 'presupuesto' ? 'null' : 'now()'
       const seller = byEmail.get(String(row.vendedor_email || '').toLowerCase())
         || byName.get(String(row.vendedor_nombre || '').trim().toLowerCase())
         || null
@@ -780,22 +784,25 @@ app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
       const result = await client.query(`
         insert into public.cotizacion_documentos (
           empresa_id, tipo, estado, numero, serie_cotizacion, origen_documento,
-          importacion_uid, importacion_archivo, fecha_emision, fecha_vcto,
+          importacion_uid, importacion_archivo, pre_numero, fecha_emision, fecha_vcto,
           cliente_nombre, cliente_contacto, cliente_rut, cliente_direccion,
           cliente_giro, cliente_comuna, cliente_telefono, cliente_ciudad, cliente_email,
           vendedor_id, vendedor_nombre, vendedor_email, referencia, observaciones,
           items, subtotal, neto, iva, total, data, emitida_at, created_by
         ) values (
-          $1, 'COTIZACIÓN', 'cotizacion_emitida', $2, $3, 'importado',
-          $4, $5, $6, $7,
-          $8, $9, $10, $11,
-          $12, $13, $14, $15, $16,
-          $17, $18, $19, $20, $21,
-          $22::jsonb, $23, $24, $25, $26, $27::jsonb, now(), $28
+          $1, $2, $3, $4, $5, 'importado',
+          $6, $7, $8, $9, $10,
+          $11, $12, $13, $14,
+          $15, $16, $17, $18, $19,
+          $20, $21, $22, $23, $24,
+          $25::jsonb, $26, $27, $28, $29, $30::jsonb, ${emitidaAtSql}, $31
         )
         on conflict (empresa_id, importacion_uid) where importacion_uid is not null
         do update set
+          tipo = excluded.tipo,
+          estado = excluded.estado,
           numero = excluded.numero,
+          pre_numero = excluded.pre_numero,
           serie_cotizacion = excluded.serie_cotizacion,
           importacion_archivo = excluded.importacion_archivo,
           fecha_emision = excluded.fecha_emision,
@@ -821,9 +828,10 @@ app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
           data = coalesce(public.cotizacion_documentos.data, '{}'::jsonb)
             || (excluded.data - 'comprobantes_transferencia'),
           updated_at = now()
-        returning id, numero, serie_cotizacion, fecha_emision, cliente_nombre
+        returning id, tipo, numero, pre_numero, serie_cotizacion, fecha_emision, cliente_nombre
       `, [
-        companyId, row.numero, row.serie_cotizacion, row.importacion_uid, row.importacion_archivo,
+        companyId, documentType, documentState, row.numero, row.serie_cotizacion,
+        row.importacion_uid, row.importacion_archivo, row.pre_numero,
         row.fecha_emision, row.fecha_vcto, row.cliente_nombre, row.cliente_contacto, row.cliente_rut,
         row.cliente_direccion, row.cliente_giro, row.cliente_comuna, row.cliente_telefono,
         row.cliente_ciudad, row.cliente_email, seller?.id || null, seller?.nombre || row.vendedor_nombre,
@@ -834,7 +842,7 @@ app.post('/api/cotizaciones/import', authenticate, async (req, res) => {
     }
 
     const thSeriesNumbers = normalized
-      .filter((item) => item.data.serie_cotizacion === 'TH')
+      .filter((item) => item.data.document_kind !== 'presupuesto' && item.data.serie_cotizacion === 'TH')
       .map((item) => Number(item.data.numero || 0))
     if (thSeriesNumbers.length) {
       const greatestNumber = Math.max(11865, ...thSeriesNumbers)
