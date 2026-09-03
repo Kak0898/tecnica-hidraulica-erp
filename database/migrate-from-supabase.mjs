@@ -13,7 +13,7 @@ const targetClient = await target.connect()
 const tables = [
   'empresas', 'usuarios_empresas', 'usuario_empresa_activa', 'perfiles_usuarios', 'usuario_permisos',
   'clientes', 'contactos', 'machines', 'spare_parts', 'erp_counters', 'cotizaciones',
-  'cotizacion_items', 'cotizacion_documentos', 'ordenes_trabajo', 'audits', 'equipo_eventos',
+  'cotizacion_items', 'cotizacion_documentos', 'ordenes_compra', 'ordenes_trabajo', 'audits', 'equipo_eventos',
   'archivos', 'import_logs', 'rrhh_centros_costo', 'rrhh_cargos', 'personas',
   'pagos_personas', 'documentos_personas', 'horas_extra',
   'google_ads_campanas', 'google_ads_metricas_diarias', 'google_ads_recomendaciones',

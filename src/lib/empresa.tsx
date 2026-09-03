@@ -7,7 +7,13 @@ type Empresa = {
   slug: string
   razon_social?: string
   rut?: string
+  email?: string
+  telefono?: string
+  direccion?: string
+  website?: string
   logo_url?: string
+  descripcion_corta?: string
+  rubro?: string
 }
 
 type UsuarioEmpresa = {
@@ -54,7 +60,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
     const { data } = await supabase
       .from('usuarios_empresas')
-      .select('rol, empresas(id, nombre, slug, razon_social, rut, logo_url)')
+      .select('rol, empresas(id, nombre, slug, razon_social, rut, email, telefono, direccion, website, logo_url, descripcion_corta, rubro)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true })
 

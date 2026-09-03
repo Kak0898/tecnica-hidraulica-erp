@@ -15,6 +15,7 @@ const Auditorias = lazy(() => import('./pages/Auditorias').then((module) => ({ d
 const Importar = lazy(() => import('./pages/Importar').then((module) => ({ default: module.Importar })))
 const Clientes = lazy(() => import('./pages/Clientes').then((module) => ({ default: module.Clientes })))
 const OrdenesTrabajo = lazy(() => import('./pages/OrdenesTrabajo').then((module) => ({ default: module.OrdenesTrabajo })))
+const OrdenesCompra = lazy(() => import('./pages/OrdenesCompra').then((module) => ({ default: module.OrdenesCompra })))
 const CRM = lazy(() => import('./pages/CRM').then((module) => ({ default: module.CRM })))
 const WhatsApp = lazy(() => import('./pages/WhatsApp').then((module) => ({ default: module.WhatsApp })))
 const IATecnica = lazy(() => import('./pages/IATecnica').then((module) => ({ default: module.IATecnica })))
@@ -128,6 +129,7 @@ export default function App(){
   {page==='empresas-asociadas' && <EmpresasAsociadas/>}
   {page==='presupuestos' && <DocumentosComerciales modo="presupuesto"/>}
   {page==='cotizaciones' && <DocumentosComerciales modo="cotizacion"/>}
+  {page==='ordenes-compra' && <OrdenesCompra/>}
   {page==='comprobantes-comisiones' && <ComprobantesComisiones/>}
   {page==='publicaciones-productos' && <PublicacionesProductos/>}
   {page==='ordenes' && <OrdenesTrabajo/>}

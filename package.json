@@ -21,6 +21,7 @@
     "db:seed:correo-credenciales": "node database/seed-correo-credenciales.mjs",
     "db:seed:vehiculo-archivos": "node database/seed-vehiculo-archivos.mjs",
     "db:seed:eliminar-empresa-confirmada": "node database/seed-eliminar-empresa-confirmada.mjs",
+    "db:seed:ordenes-compra": "node database/seed-ordenes-compra.mjs",
     "db:seed:comisiones-importacion": "node database/seed-comisiones-importacion.mjs",
     "db:seed:ordenes-formato": "node database/seed-ordenes-formato.mjs",
     "db:migrate:supabase": "node database/migrate-from-supabase.mjs",

@@ -17,6 +17,7 @@ export const MODULE_GROUPS = [
       { key: 'empresas_asociadas', label: 'Empresas asociadas' },
       { key: 'presupuestos', label: 'Presupuestos' },
       { key: 'cotizaciones', label: 'Cotizaciones' },
+      { key: 'ordenes_compra', label: 'Órdenes de compra' },
       { key: 'comprobantes_comisiones', label: 'Comprobantes y comisiones' },
       { key: 'publicaciones', label: 'Publicaciones' },
       { key: 'ordenes', label: 'Órdenes de trabajo' },
@@ -70,6 +71,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
   'empresas-asociadas': 'empresas_asociadas',
   presupuestos: 'presupuestos',
   cotizaciones: 'cotizaciones',
+  'ordenes-compra': 'ordenes_compra',
   'comprobantes-comisiones': 'comprobantes_comisiones',
   'publicaciones-productos': 'publicaciones',
   ordenes: 'ordenes',
@@ -95,7 +97,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
 
 const PAGE_ORDER = [
   'dashboard', 'google-ads', 'clientes', 'empresas-asociadas', 'presupuestos',
-  'cotizaciones', 'comprobantes-comisiones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
+  'cotizaciones', 'ordenes-compra', 'comprobantes-comisiones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
   'rrhh-personas', 'rrhh-contratos', 'rrhh-ausencias', 'rrhh-documentos',
   'personas-pagos', 'flota-vehiculos', 'maquinaria', 'repuestos', 'epp-ropa',
   'documentos-empresa', 'cpanel-hosting', 'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',

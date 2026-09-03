@@ -1,6 +1,6 @@
 export const ALL_MODULES = [
   'dashboard', 'google_ads', 'clientes', 'empresas_asociadas',
-  'presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'publicaciones', 'ordenes',
+  'presupuestos', 'cotizaciones', 'ordenes_compra', 'comprobantes_comisiones', 'publicaciones', 'ordenes',
   'crm', 'whatsapp', 'rrhh_personas', 'rrhh_contratos',
   'rrhh_ausencias', 'rrhh_documentos', 'personas_pagos',
   'flota', 'maquinaria', 'repuestos', 'epp_ropa', 'documentos_empresa', 'cpanel_hosting', 'auditorias',
@@ -25,6 +25,7 @@ export const TABLE_ACCESS = {
   cotizaciones: access(['cotizaciones'], ['cotizaciones']),
   cotizacion_items: access(['cotizaciones'], ['cotizaciones']),
   cotizacion_documentos: access(['presupuestos', 'cotizaciones', 'comprobantes_comisiones', 'ordenes'], ['presupuestos', 'cotizaciones', 'comprobantes_comisiones']),
+  ordenes_compra: access(['ordenes_compra'], ['ordenes_compra']),
   ordenes_trabajo: access(['ordenes', 'ia'], ['ordenes']),
   audits: access(['auditorias'], ['auditorias']),
   equipo_eventos: access(['maquinaria', 'ordenes', 'auditorias'], ['maquinaria', 'ordenes', 'auditorias']),
@@ -109,6 +110,9 @@ export const RELATIONS = {
   vehiculos_empresa: {
     empresas_asociadas: { target: 'empresas_asociadas', sourceKey: 'empresa_asociada_id', targetKey: 'id', many: false },
     personas: { target: 'personas', sourceKey: 'conductor_id', targetKey: 'id', many: false },
+  },
+  ordenes_compra: {
+    empresas_asociadas: { target: 'empresas_asociadas', sourceKey: 'proveedor_id', targetKey: 'id', many: false },
   },
   productos_comerciales: {
     publicaciones_productos: { target: 'publicaciones_productos', sourceKey: 'id', targetKey: 'producto_id', many: true },
