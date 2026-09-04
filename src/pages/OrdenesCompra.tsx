@@ -4,7 +4,7 @@ import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
 import { supabase } from '../lib/supabase'
-import { EmptyState, StatusBadge, formatDate, inputClass, labelClass } from './rrhh/shared'
+import { EmptyState, StatusBadge, formatDate, inputClass, labelClass, money } from './rrhh/shared'
 
 type Proveedor = {
   id: string
@@ -24,6 +24,8 @@ type CompraItem = {
   cantidad: string
   codigo: string
   descripcion: string
+  valor_unitario: string
+  es_referencia?: boolean
 }
 
 type OrdenCompra = {
@@ -48,7 +50,7 @@ type OrdenCompra = {
   empresas_asociadas?: Proveedor | null
 }
 
-const blankItem = { cantidad: '1', codigo: '', descripcion: '' }
+const blankItem = { cantidad: '1', codigo: '', descripcion: '', valor_unitario: '' }
 const today = () => new Date().toISOString().slice(0, 10)
 
 function nextNumber() {
@@ -61,6 +63,7 @@ const emptyForm = {
   fecha_emision: today(),
   fecha_entrega: '',
   cotizacion_referencia: '',
+  descuento: '',
   condiciones: '',
   observaciones: '',
   estado: 'borrador' as OrdenCompra['estado'],
@@ -81,6 +84,11 @@ function clean(value: string) {
   return value.trim() || null
 }
 
+function numeric(value: string | number) {
+  const parsed = Number(String(value || '0').replace(/\./g, '').replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 function nextNumberFromOrders(orders: OrdenCompra[]) {
   const maxNumber = orders.reduce((max, order) => {
     const raw = String(order.numero || '').trim()
@@ -91,9 +99,50 @@ function nextNumberFromOrders(orders: OrdenCompra[]) {
   return String(maxNumber + 1)
 }
 
+const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve']
+const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+
+function underHundredWords(value: number) {
+  if (value < 10) return units[value]
+  if (value < 20) return teens[value - 10]
+  if (value === 20) return 'veinte'
+  if (value < 30) return `veinti${units[value - 20]}`
+  const ten = Math.floor(value / 10)
+  const unit = value % 10
+  return unit ? `${tens[ten]} y ${units[unit]}` : tens[ten]
+}
+
+function underThousandWords(value: number) {
+  if (value === 0) return ''
+  if (value === 100) return 'cien'
+  if (value < 100) return underHundredWords(value)
+  const hundred = Math.floor(value / 100)
+  const rest = value % 100
+  return [hundreds[hundred], underHundredWords(rest)].filter(Boolean).join(' ')
+}
+
+function numberToSpanish(value: number): string {
+  const amount = Math.max(0, Math.round(value))
+  if (amount === 0) return 'cero'
+  const millions = Math.floor(amount / 1000000)
+  const thousands = Math.floor((amount % 1000000) / 1000)
+  const rest = amount % 1000
+  const parts = []
+  if (millions) parts.push(millions === 1 ? 'un millon' : `${numberToSpanish(millions)} millones`)
+  if (thousands) parts.push(thousands === 1 ? 'mil' : `${underThousandWords(thousands)} mil`)
+  if (rest) parts.push(underThousandWords(rest))
+  return parts.join(' ')
+}
+
+function amountInWords(value: number) {
+  return `${numberToSpanish(value).toUpperCase()} PESOS`
+}
+
 function printableItems(order: OrdenCompra) {
   const quote = String(order.cotizacion_referencia || '').trim()
-  const quoteRow = quote ? [{ cantidad: '', codigo: '', descripcion: `Cotización asociada: ${quote}` }] : []
+  const quoteRow = quote ? [{ cantidad: '', codigo: '', descripcion: `Cotización asociada: ${quote}`, valor_unitario: '', es_referencia: true }] : []
   return [...quoteRow, ...(order.items || [])]
 }
 
@@ -122,14 +171,20 @@ function providerName(order: OrdenCompra) {
   return order.proveedor_snapshot?.razon_social || order.empresas_asociadas?.razon_social || 'Sin proveedor'
 }
 
+function itemTotal(item: CompraItem) {
+  if (item.es_referencia) return 0
+  return numeric(item.cantidad) * numeric(item.valor_unitario)
+}
+
 function normalizedItems(items: CompraItem[]) {
   return items
     .map((item) => ({
       cantidad: String(item.cantidad || '').trim() || '1',
       codigo: String(item.codigo || '').trim(),
       descripcion: String(item.descripcion || '').trim(),
+      valor_unitario: String(item.valor_unitario || '').trim(),
     }))
-    .filter((item) => item.descripcion || item.codigo)
+    .filter((item) => item.descripcion || item.codigo || numeric(item.valor_unitario) > 0)
 }
 
 function moduleMessage(error: { code?: string; message?: string } | null | undefined) {
@@ -155,13 +210,17 @@ function companyLines(company: ReturnType<typeof useEmpresa>['activeEmpresa']) {
 
 function buildPrintHtml(order: OrdenCompra, company: ReturnType<typeof useEmpresa>['activeEmpresa']) {
   const provider = order.proveedor_snapshot || order.empresas_asociadas || {}
+  const discount = Number(order.descuento || 0)
   const itemsForPrint = printableItems(order)
   const rows = Array.from({ length: Math.max(10, itemsForPrint.length) }).map((_, index) => {
     const item = itemsForPrint[index]
+    const isReference = Boolean(item?.es_referencia)
     return `<tr>
       <td>${esc(item?.cantidad || '')}</td>
       <td>${esc(item?.codigo || '')}</td>
       <td>${esc(item?.descripcion || '')}</td>
+      <td class="num">${item && !isReference ? esc(money(numeric(item.valor_unitario))) : ''}</td>
+      <td class="num">${item && !isReference ? esc(money(itemTotal(item))) : ''}</td>
     </tr>`
   }).join('')
   const logo = company?.logo_url ? `<img src="${esc(company.logo_url)}" alt="Logo">` : ''
@@ -182,8 +241,8 @@ body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#1
 .quote-block{border:1px solid #d5dbea;border-radius:8px;padding:3.5mm;text-align:center;color:#0f2a66}.quote-label{font-size:11px;font-weight:800;text-transform:uppercase}.quote-number{font-size:25px;font-weight:900;line-height:1.05}.date-block{margin-top:3mm;text-align:left;color:#111827}.date-row{display:grid;grid-template-columns:26mm 1fr;align-items:center;gap:2mm;margin-top:2mm;font-size:10.5px}.date-value{border:1px solid #cbd5e1;border-radius:5px;min-height:7mm;padding:1.5mm;text-align:center}
 .info{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin:7mm 0}.info-table{width:100%;border-collapse:collapse;table-layout:fixed}.info-table th{background:#0f2a66;color:white;text-align:left;font-size:11px;padding:2mm}.info-table td{border:1px solid #cbd5e1;padding:2mm;font-size:11px;min-height:7mm}.info-table .label{width:30mm;background:#f8fafc;font-weight:800;color:#334155}
 .block-title{margin:5mm 0 2mm;background:#0f2a66;color:white;padding:2mm 3mm;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px}
-.main-table{width:100%;border-collapse:collapse;table-layout:fixed}.main-table th,.main-table td{border:1px solid #94a3b8;padding:2mm;font-size:11px;vertical-align:top}.main-table th{background:#eef2ff;color:#0f2a66;text-transform:uppercase}.main-table td{height:8.5mm}.qty{width:22mm}.code{width:34mm}
-.notes{border:1px solid #cbd5e1;min-height:34mm;padding:3mm;white-space:pre-wrap;font-size:11px;line-height:1.45}
+.main-table{width:100%;border-collapse:collapse;table-layout:fixed}.main-table th,.main-table td{border:1px solid #94a3b8;padding:2mm;font-size:11px;vertical-align:top}.main-table th{background:#eef2ff;color:#0f2a66;text-transform:uppercase}.main-table td{height:8.5mm}.qty{width:18mm}.code{width:30mm}.money{width:30mm}.num{text-align:right;white-space:nowrap}
+.bottom{display:grid;grid-template-columns:1fr 72mm;gap:7mm;margin-top:5mm}.notes{border:1px solid #cbd5e1;min-height:34mm;padding:3mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.totals{width:100%;border-collapse:collapse}.totals td{border:1px solid #94a3b8;padding:2.3mm;font-size:12px}.totals td:first-child{font-weight:800;background:#f8fafc}.totals .grand td{background:#0f2a66;color:white;font-weight:900;font-size:13px}.son{margin-top:3mm;border:1px solid #cbd5e1;padding:2.5mm;font-size:11px;font-weight:800;text-transform:uppercase}
 .terms{margin-top:5mm;border:1px solid #cbd5e1;padding:3mm;min-height:22mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.signs{display:grid;grid-template-columns:1fr 1fr;gap:20mm;margin-top:18mm;text-align:center;font-size:11px}.sign{border-top:1px solid #334155;padding-top:2mm}.sign b{display:block;font-size:12px}.sign span{display:block;color:#475569;margin-top:1mm}
 @media print{body{background:white}.toolbar{display:none}.sheet{border:0;margin:0;width:auto;min-height:auto;page-break-after:always}thead{display:table-header-group}}
 </style>
@@ -227,10 +286,11 @@ body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#1
   </section>
 
   <div class="block-title">Detalle de compra</div>
-  ${order.cotizacion_referencia ? `<p style="margin:0 0 2mm;font-size:11px"><b>Cotización asociada:</b> ${esc(order.cotizacion_referencia)}</p>` : ''}
-  <table class="main-table"><thead><tr><th class="qty">Cant.</th><th class="code">Código</th><th>Detalle</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="block-title">Observaciones</div>
-  <section class="notes">${esc(order.observaciones)}</section>
+  <table class="main-table"><thead><tr><th class="qty">Cant.</th><th class="code">Código</th><th>Detalle</th><th class="money">Valor Unitario</th><th class="money">Valor Total</th></tr></thead><tbody>${rows}</tbody></table>
+  <section class="bottom">
+    <div><div class="block-title">Observaciones</div><div class="notes">${esc(order.observaciones)}</div><div class="son">SON: ${esc(amountInWords(order.total))}</div></div>
+    <table class="totals"><tr><td>Subtotal</td><td class="num">${esc(money(order.subtotal + discount))}</td></tr><tr><td>Dscto.</td><td class="num">${esc(money(discount))}</td></tr><tr><td>Neto</td><td class="num">${esc(money(order.subtotal))}</td></tr><tr><td>IVA 19%</td><td class="num">${esc(money(order.iva))}</td></tr><tr class="grand"><td>Total</td><td class="num">${esc(money(order.total))}</td></tr></table>
+  </section>
   <div class="block-title">Condiciones</div>
   <section class="terms">${esc(order.condiciones)}<br><br><b>TODO DESPACHO SE DEBE REALIZAR CON GUIAS DE DESPACHO Y/O CON FACTURA INDICANDO NUMERO DE ORDEN DE COMPRA EN DICHOS DOCUMENTOS</b></section>
   <section class="signs">
@@ -244,6 +304,7 @@ body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#1
 
 function Preview({ order, company }: { order: OrdenCompra; company: ReturnType<typeof useEmpresa>['activeEmpresa'] }) {
   const provider = order.proveedor_snapshot || order.empresas_asociadas || {}
+  const discount = Number(order.descuento || 0)
   const itemsForPrint = printableItems(order)
   const rows = Array.from({ length: Math.max(8, Math.min(12, itemsForPrint.length || 8)) }).map((_, index) => itemsForPrint[index] || null)
   return <div className="rounded-2xl bg-slate-100 p-3">
@@ -259,11 +320,21 @@ function Preview({ order, company }: { order: OrdenCompra; company: ReturnType<t
         <div className="rounded border border-slate-500 p-3"><b>Proveedor</b><p className="mt-2">{provider.razon_social || 'Sin proveedor'}</p><p>{provider.rut || 'Sin RUT'}</p><p>{provider.direccion || 'Sin dirección'}</p><p>{provider.telefono || ''}</p></div>
         <div className="rounded border border-slate-500 p-3"><b>Datos OC</b><p className="mt-2"><b>Cotización:</b> {order.cotizacion_referencia || 'Sin asociar'}</p><p className="mt-2 whitespace-pre-wrap">{order.condiciones || 'Sin condiciones'}</p><p className="mt-2"><b>Estado:</b> {order.estado}</p></div>
       </div>
-      {order.cotizacion_referencia && <p className="mt-3 text-xs"><b>Cotización asociada:</b> {order.cotizacion_referencia}</p>}
       <table className="mt-4 w-full table-fixed border-collapse text-xs">
-        <thead><tr className="bg-slate-100"><th className="w-16 border border-slate-500 p-2">Cant.</th><th className="w-24 border border-slate-500 p-2">Código</th><th className="border border-slate-500 p-2">Descripción</th></tr></thead>
-        <tbody>{rows.map((item, index) => <tr key={index}><td className="h-8 border border-slate-500 p-1 text-center">{item?.cantidad}</td><td className="border border-slate-500 p-1">{item?.codigo}</td><td className="border border-slate-500 p-1">{item?.descripcion}</td></tr>)}</tbody>
+        <thead><tr className="bg-slate-100"><th className="w-16 border border-slate-500 p-2">Cant.</th><th className="w-24 border border-slate-500 p-2">Código</th><th className="border border-slate-500 p-2">Descripción</th><th className="w-24 border border-slate-500 p-2">Unit.</th><th className="w-24 border border-slate-500 p-2">Total</th></tr></thead>
+        <tbody>{rows.map((item, index) => {
+          const isReference = Boolean(item?.es_referencia)
+          return <tr key={index}><td className="h-8 border border-slate-500 p-1 text-center">{item?.cantidad}</td><td className="border border-slate-500 p-1">{item?.codigo}</td><td className="border border-slate-500 p-1">{item?.descripcion}</td><td className="border border-slate-500 p-1 text-right">{item && !isReference ? money(numeric(item.valor_unitario)) : ''}</td><td className="border border-slate-500 p-1 text-right">{item && !isReference ? money(itemTotal(item)) : ''}</td></tr>
+        })}</tbody>
       </table>
+      <div className="ml-auto mt-4 w-64 text-xs">
+        <div className="grid grid-cols-2 border border-slate-500"><b className="p-2">Subtotal</b><span className="border-l border-slate-500 p-2 text-right">{money(order.subtotal + discount)}</span></div>
+        <div className="grid grid-cols-2 border-x border-b border-slate-500"><b className="p-2">Dscto.</b><span className="border-l border-slate-500 p-2 text-right">{money(discount)}</span></div>
+        <div className="grid grid-cols-2 border-x border-b border-slate-500"><b className="p-2">Neto</b><span className="border-l border-slate-500 p-2 text-right">{money(order.subtotal)}</span></div>
+        <div className="grid grid-cols-2 border-x border-b border-slate-500"><b className="p-2">IVA 19%</b><span className="border-l border-slate-500 p-2 text-right">{money(order.iva)}</span></div>
+        <div className="grid grid-cols-2 bg-slate-950 text-white"><b className="p-2">Total</b><span className="p-2 text-right">{money(order.total)}</span></div>
+      </div>
+      <p className="mt-3 rounded border border-slate-300 p-2 text-xs font-black uppercase">SON: {amountInWords(order.total)}</p>
       <p className="mt-3 text-[10px] font-black uppercase leading-tight">Todo despacho se debe realizar con guias de despacho y/o con factura indicando numero de orden de compra en dichos documentos.</p>
       <div className="mt-10 grid grid-cols-2 gap-16 text-center text-xs">
         <div className="border-t border-slate-600 pt-2"><b>Rafael Espinoza Toledo</b><p className="text-slate-500">Gerente de Operaciones</p></div>
@@ -312,6 +383,13 @@ export function OrdenesCompra() {
   useEffect(() => { void load() }, [activeEmpresaId])
 
   const selectedProvider = useMemo(() => providers.find((item) => item.id === form.proveedor_id) || null, [form.proveedor_id, providers])
+  const totals = useMemo(() => {
+    const bruto = normalizedItems(form.items).reduce((sum, item) => sum + itemTotal(item), 0)
+    const descuento = Math.min(Math.max(0, numeric(form.descuento)), bruto)
+    const subtotal = bruto - descuento
+    const iva = Math.round(subtotal * 0.19)
+    return { bruto, descuento, subtotal, iva, total: subtotal + iva }
+  }, [form.descuento, form.items])
   const itemCount = useMemo(() => normalizedItems(form.items).length, [form.items])
 
   const previewOrder = useMemo<OrdenCompra>(() => {
@@ -327,10 +405,10 @@ export function OrdenesCompra() {
       proveedor_snapshot: providerSnapshot(selectedProvider),
       items: normalizedItems(form.items),
       cotizacion_referencia: form.cotizacion_referencia,
-      descuento: 0,
-      subtotal: 0,
-      iva: 0,
-      total: 0,
+      descuento: totals.descuento,
+      subtotal: totals.subtotal,
+      iva: totals.iva,
+      total: totals.total,
       moneda: 'CLP',
       condiciones: form.condiciones,
       observaciones: form.observaciones,
@@ -338,7 +416,7 @@ export function OrdenesCompra() {
       created_at: new Date().toISOString(),
       empresas_asociadas: selectedProvider,
     }
-  }, [activeEmpresaId, editingId, form, orders, previewId, selectedProvider])
+  }, [activeEmpresaId, editingId, form, orders, previewId, selectedProvider, totals])
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
@@ -401,10 +479,11 @@ export function OrdenesCompra() {
       fecha_emision: duplicate ? today() : order.fecha_emision,
       fecha_entrega: order.fecha_entrega || '',
       cotizacion_referencia: order.cotizacion_referencia || '',
+      descuento: order.descuento ? String(Math.round(Number(order.descuento))) : '',
       condiciones: order.condiciones || '',
       observaciones: order.observaciones || '',
       estado: duplicate ? 'borrador' : order.estado,
-      items: order.items?.length ? order.items.map((item) => ({ ...blankItem, ...item, cantidad: String(item.cantidad || '1') })) : [{ ...blankItem }],
+      items: order.items?.length ? order.items.map((item) => ({ ...blankItem, ...item, cantidad: String(item.cantidad || '1'), valor_unitario: String(item.valor_unitario || '') })) : [{ ...blankItem }],
     })
     setEditingId(duplicate ? '' : order.id)
     setPreviewId('')
@@ -428,10 +507,10 @@ export function OrdenesCompra() {
       proveedor_snapshot: providerSnapshot(selectedProvider),
       items,
       cotizacion_referencia: clean(form.cotizacion_referencia),
-      descuento: 0,
-      subtotal: 0,
-      iva: 0,
-      total: 0,
+      descuento: totals.descuento,
+      subtotal: totals.subtotal,
+      iva: totals.iva,
+      total: totals.total,
       moneda: 'CLP',
       condiciones: clean(form.condiciones),
       observaciones: clean(form.observaciones),
@@ -547,12 +626,14 @@ export function OrdenesCompra() {
           <div className="mt-5 space-y-3">
             <div className="flex items-center justify-between"><h4 className="font-black">Detalle</h4><button type="button" onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700"><Plus size={16} />Línea</button></div>
             {form.items.map((item, index) => <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="grid gap-2 sm:grid-cols-[74px_1fr_36px]">
+              <div className="grid gap-2 sm:grid-cols-[74px_1fr_120px_36px]">
                 <input value={item.cantidad} onChange={(event) => updateItem(index, 'cantidad', event.target.value)} className={inputClass} placeholder="Cant." />
                 <input value={item.codigo} onChange={(event) => updateItem(index, 'codigo', event.target.value)} className={inputClass} placeholder="Código / parte" />
+                <input value={item.valor_unitario} onChange={(event) => updateItem(index, 'valor_unitario', event.target.value)} className={`${inputClass} text-right`} placeholder="Valor" />
                 <button type="button" onClick={() => removeItem(index)} className="mt-1.5 rounded-lg bg-red-50 p-2 text-red-700" aria-label="Eliminar línea"><Trash2 size={16} /></button>
               </div>
               <textarea value={item.descripcion} onChange={(event) => updateItem(index, 'descripcion', event.target.value)} className={`${inputClass} min-h-20 resize-y`} placeholder="Descripción del producto o servicio" />
+              <p className="mt-2 text-right text-sm font-black text-slate-700">Línea: {money(itemTotal(item))}</p>
             </div>)}
           </div>
 
@@ -560,7 +641,16 @@ export function OrdenesCompra() {
             <label className={labelClass}>Condiciones<textarea value={form.condiciones} onChange={(event) => setForm({ ...form, condiciones: event.target.value })} className={`${inputClass} min-h-20 resize-y`} placeholder="Forma de pago, despacho, plazo..." /></label>
             <label className={labelClass}>Observaciones<textarea value={form.observaciones} onChange={(event) => setForm({ ...form, observaciones: event.target.value })} className={`${inputClass} min-h-20 resize-y`} /></label>
           </div>
-          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-600">{itemCount} línea(s) listas para imprimir sin valores ni totales.</p>
+          <div className="mt-4 rounded-xl bg-slate-950 p-4 text-white">
+            <label className="mb-3 block text-sm font-bold text-white">Dscto.<input value={form.descuento} onChange={(event) => setForm({ ...form, descuento: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/20 bg-white px-3 py-2.5 text-right font-normal text-slate-950 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200" placeholder="0" /></label>
+            <div className="flex justify-between text-sm"><span>Subtotal</span><b>{money(totals.bruto)}</b></div>
+            <div className="mt-1 flex justify-between text-sm"><span>Dscto.</span><b>{money(totals.descuento)}</b></div>
+            <div className="mt-1 flex justify-between text-sm"><span>Neto</span><b>{money(totals.subtotal)}</b></div>
+            <div className="mt-1 flex justify-between text-sm"><span>IVA 19%</span><b>{money(totals.iva)}</b></div>
+            <div className="mt-2 flex justify-between border-t border-white/20 pt-2 text-lg font-black"><span>Total</span><span>{money(totals.total)}</span></div>
+            <p className="mt-2 text-xs font-black uppercase text-blue-100">SON: {amountInWords(totals.total)}</p>
+          </div>
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-600">{itemCount} línea(s) listas para imprimir. La cotización asociada aparece solo como referencia, sin precio ni total.</p>
           <button type="button" onClick={save} disabled={saving} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50"><Save size={17} />{saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar OC'}</button>
         </Card>
 
@@ -569,7 +659,7 @@ export function OrdenesCompra() {
           <input value={query} onChange={(event) => setQuery(event.target.value)} className="mb-3 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="Buscar por número o proveedor" />
           {loading ? <p className="py-8 text-center text-slate-500">Cargando órdenes...</p> : !filtered.length ? <EmptyState>Aún no hay órdenes de compra.</EmptyState> : <div className="max-h-[560px] space-y-2 overflow-auto pr-1">
             {filtered.map((order) => <div key={order.id} className="rounded-xl border border-slate-200 p-3">
-              <div className="flex items-start justify-between gap-2"><div><button type="button" onClick={() => { setPreviewId(order.id); setEditingId('') }} className="text-left font-black text-slate-950 hover:text-blue-700">OC {order.numero}</button><p className="mt-1 text-sm text-slate-500">{providerName(order)}</p><p className="mt-1 text-xs text-slate-500">{formatDate(order.fecha_emision)}</p>{order.cotizacion_referencia && <p className="mt-1 text-xs font-semibold text-blue-700">Cotización: {order.cotizacion_referencia}</p>}</div><StatusBadge value={order.estado} /></div>
+              <div className="flex items-start justify-between gap-2"><div><button type="button" onClick={() => { setPreviewId(order.id); setEditingId('') }} className="text-left font-black text-slate-950 hover:text-blue-700">OC {order.numero}</button><p className="mt-1 text-sm text-slate-500">{providerName(order)}</p><p className="mt-1 text-xs text-slate-500">{formatDate(order.fecha_emision)} · {money(order.total)}</p>{order.cotizacion_referencia && <p className="mt-1 text-xs font-semibold text-blue-700">Cotización: {order.cotizacion_referencia}</p>}</div><StatusBadge value={order.estado} /></div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" onClick={() => { setPreviewId(order.id); setEditingId('') }} className="rounded-lg bg-slate-100 p-2 text-slate-700" title="Ver"><Eye size={16} /></button>
                 <button type="button" onClick={() => edit(order)} className="rounded-lg bg-blue-100 p-2 text-blue-700" title="Editar"><Pencil size={16} /></button>
