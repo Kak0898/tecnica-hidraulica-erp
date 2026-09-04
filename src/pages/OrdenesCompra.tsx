@@ -89,6 +89,10 @@ function numeric(value: string | number) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
 function nextNumberFromOrders(orders: OrdenCompra[]) {
   const maxNumber = orders.reduce((max, order) => {
     const raw = String(order.numero || '').trim()
@@ -429,9 +433,10 @@ export function OrdenesCompra() {
   }
 
   function updateItem(index: number, field: keyof CompraItem, value: string) {
+    const nextValue = field === 'cantidad' || field === 'valor_unitario' ? onlyDigits(value) : value
     setForm((current) => ({
       ...current,
-      items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item),
+      items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: nextValue } : item),
     }))
   }
 
@@ -629,9 +634,9 @@ export function OrdenesCompra() {
             <div className="flex items-center justify-between"><h4 className="font-black">Detalle</h4><button type="button" onClick={addItem} className="inline-flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700"><Plus size={16} />Línea</button></div>
             {form.items.map((item, index) => <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="grid gap-2 sm:grid-cols-[74px_1fr_120px_36px]">
-                <input value={item.cantidad} onChange={(event) => updateItem(index, 'cantidad', event.target.value)} className={inputClass} placeholder="Cant." />
+                <input value={item.cantidad} onChange={(event) => updateItem(index, 'cantidad', event.target.value)} inputMode="numeric" pattern="[0-9]*" className={inputClass} placeholder="Cant." />
                 <input value={item.codigo} onChange={(event) => updateItem(index, 'codigo', event.target.value)} className={inputClass} placeholder="Código / parte" />
-                <input value={item.valor_unitario} onChange={(event) => updateItem(index, 'valor_unitario', event.target.value)} className={`${inputClass} text-right`} placeholder="Valor" />
+                <input value={item.valor_unitario} onChange={(event) => updateItem(index, 'valor_unitario', event.target.value)} inputMode="numeric" pattern="[0-9]*" className={`${inputClass} text-right`} placeholder="Valor" />
                 <button type="button" onClick={() => removeItem(index)} className="mt-1.5 rounded-lg bg-red-50 p-2 text-red-700" aria-label="Eliminar línea"><Trash2 size={16} /></button>
               </div>
               <textarea value={item.descripcion} onChange={(event) => updateItem(index, 'descripcion', event.target.value)} className={`${inputClass} min-h-20 resize-y`} placeholder="Descripción del producto o servicio" />
@@ -644,7 +649,7 @@ export function OrdenesCompra() {
             <label className={labelClass}>Observaciones<textarea value={form.observaciones} onChange={(event) => setForm({ ...form, observaciones: event.target.value })} className={`${inputClass} min-h-20 resize-y`} /></label>
           </div>
           <div className="mt-4 rounded-xl bg-slate-950 p-4 text-white">
-            <label className="mb-3 block text-sm font-bold text-white">Dscto.<input value={form.descuento} onChange={(event) => setForm({ ...form, descuento: event.target.value })} className="mt-1.5 w-full rounded-xl border border-white/20 bg-white px-3 py-2.5 text-right font-normal text-slate-950 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200" placeholder="0" /></label>
+            <label className="mb-3 block text-sm font-bold text-white">Dscto.<input value={form.descuento} onChange={(event) => setForm({ ...form, descuento: onlyDigits(event.target.value) })} inputMode="numeric" pattern="[0-9]*" className="mt-1.5 w-full rounded-xl border border-white/20 bg-white px-3 py-2.5 text-right font-normal text-slate-950 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200" placeholder="0" /></label>
             <div className="flex justify-between text-sm"><span>Subtotal</span><b>{money(totals.bruto)}</b></div>
             <div className="mt-1 flex justify-between text-sm"><span>Dscto.</span><b>{money(totals.descuento)}</b></div>
             <div className="mt-1 flex justify-between text-sm"><span>Neto</span><b>{money(totals.subtotal)}</b></div>
