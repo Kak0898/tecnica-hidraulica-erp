@@ -212,8 +212,7 @@ function buildPrintHtml(order: OrdenCompra, company: ReturnType<typeof useEmpres
   const provider = order.proveedor_snapshot || order.empresas_asociadas || {}
   const discount = Number(order.descuento || 0)
   const itemsForPrint = printableItems(order)
-  const rows = Array.from({ length: Math.max(10, itemsForPrint.length) }).map((_, index) => {
-    const item = itemsForPrint[index]
+  const rows = itemsForPrint.map((item) => {
     const isReference = Boolean(item?.es_referencia)
     return `<tr>
       <td>${esc(item?.cantidad || '')}</td>
@@ -307,7 +306,7 @@ function Preview({ order, company }: { order: OrdenCompra; company: ReturnType<t
   const provider = order.proveedor_snapshot || order.empresas_asociadas || {}
   const discount = Number(order.descuento || 0)
   const itemsForPrint = printableItems(order)
-  const rows = Array.from({ length: Math.max(8, Math.min(12, itemsForPrint.length || 8)) }).map((_, index) => itemsForPrint[index] || null)
+  const rows = itemsForPrint
   return <div className="rounded-2xl bg-slate-100 p-3">
     <div className="mx-auto aspect-[216/279] max-w-[760px] overflow-hidden rounded border border-slate-300 bg-white p-6 text-slate-900 shadow-sm">
       <div className="grid grid-cols-[1fr_220px] gap-6 border-b-2 border-slate-900 pb-4">
