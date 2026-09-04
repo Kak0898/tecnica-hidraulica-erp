@@ -112,6 +112,7 @@ const defaultDoc = {
   email:'',
   vendedorNombre:'',
   vendedorEmail:'',
+  vendedorTelefono:'',
   asuntoTransferencia:'',
   referencia:'',
   referencias:[{texto:'', items:[{codigo:'', descripcion:'', cantidad:1, um:'UN', precio:0, dscto:0}]}],
@@ -271,7 +272,7 @@ async function loadBranding(){
 
     const { data: sellerProfile } = await supabaseClient
       .from('personas')
-      .select('nombre, email, cargo, configuracion_extra')
+      .select('nombre, email, telefono, cargo, configuracion_extra')
       .eq('empresa_id', empresaId)
       .eq('usuario_id', user?.id || '')
       .maybeSingle();
@@ -282,6 +283,8 @@ async function loadBranding(){
       firmaNombre: sellerProfile?.nombre || brand.firmaNombre,
       firmaCargo: sellerProfile?.cargo || brand.firmaCargo,
       firmaEmail: sellerProfile?.email || brand.firmaEmail,
+      firmaTelefono: sellerCommercial.firma_telefono || sellerCommercial.telefono_empresa || sellerProfile?.telefono || brand.firmaTelefono,
+      firmaCelular: sellerCommercial.firma_celular || brand.firmaCelular,
       transferenciaBanco: sellerCommercial.transferencia_banco || brand.transferenciaBanco,
       transferenciaRut: sellerCommercial.transferencia_rut || brand.transferenciaRut,
       transferenciaTipoCuenta: sellerCommercial.transferencia_tipo_cuenta || brand.transferenciaTipoCuenta,
@@ -296,6 +299,7 @@ async function loadBranding(){
     activeCompanyId = empresaId;
     state.vendedorNombre = state.vendedorNombre || brand.firmaNombre || userMetadata.erp_nombre || user?.email || '';
     state.vendedorEmail = state.vendedorEmail || brand.firmaEmail || brand.transferenciaEmailFallback;
+    state.vendedorTelefono = state.vendedorTelefono || brand.firmaTelefono || '';
     state.asuntoTransferencia = state.asuntoTransferencia || transferSubject(state);
     await loadRegisteredClients(empresaId);
 
@@ -690,6 +694,7 @@ function exportRecord(item){
     cliente_email: doc.email || '',
     vendedor_nombre: doc.vendedorNombre || '',
     vendedor_email: doc.vendedorEmail || '',
+    vendedor_telefono: doc.vendedorTelefono || '',
     moneda: currentCurrency(doc),
     referencia: referenciasTextoFromDoc(doc),
     observaciones: doc.observaciones || '',
@@ -778,6 +783,7 @@ function brandDescription(){return brand.descripcion || DEFAULT_BRAND.descripcio
 function brandAddressLine(){return brand.direccion || DEFAULT_BRAND.direccion}
 function sellerName(doc=state){return doc.vendedorNombre || brand.firmaNombre || brandName()}
 function sellerEmail(doc=state){return doc.vendedorEmail || brand.firmaEmail || brand.transferenciaEmailFallback || brandEmail()}
+function sellerPhone(doc=state){return doc.vendedorTelefono || brand.firmaTelefono || ''}
 function documentFolio(doc=state){return doc.numero || doc.preNumero || 'pendiente'}
 function transferSubject(doc=state){
   const template = brand.transferenciaAsuntoTemplate || DEFAULT_BRAND.transferenciaAsuntoTemplate;
@@ -788,7 +794,8 @@ function transferSubject(doc=state){
 }
 function brandContactLine(){
   const parts = [];
-  if (brandPhone()) parts.push(`<b>Teléfono:</b> ${esc(brandPhone())}`);
+  const phone = sellerPhone();
+  if (phone) parts.push(`<b>Teléfono:</b> ${esc(phone)}`);
   if (brandEmail()) parts.push(`<b>E-mail:</b> ${esc(brandEmail())}`);
   return parts.join(' · ');
 }
@@ -913,7 +920,7 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
           <tr><td class="label">Presupuesto N°</td><td>${esc(displayNumber)}</td></tr>
           <tr><td class="label">Razón social</td><td>${esc(brandName())}</td></tr>
           <tr><td class="label">R.U.T.</td><td>${esc(doc.rutEmpresa || brandRut())}</td></tr>
-          <tr><td class="label">Fono</td><td>${esc(brand.firmaTelefono || brandPhone())}</td></tr>
+          <tr><td class="label">Fono</td><td>${esc(sellerPhone(doc))}</td></tr>
         </table>
       </section>
 
@@ -973,7 +980,7 @@ function renderPreOrdenSheet(t, displayNumber, doc=state){
         <b>${esc(brand.firmaNombre || brandName())}</b>
         <span>${esc(brand.firmaCargo || 'Representante comercial')}</span><br>
         <span>${esc(brand.firmaEmail || brandEmail())}</span><br>
-        <span>Fono: ${esc(brand.firmaTelefono || brandPhone())}</span><br>
+        <span>Fono: ${esc(sellerPhone(doc))}</span><br>
         <span>Cel.: ${esc(brand.firmaCelular || '')}</span>
       </section>
       <div class="bank"><b>DATOS DE TRANSFERENCIA</b><br>Titular: ${esc(brandName())} · RUT: ${esc(brand.transferenciaRut || brandRut())}<br>${esc(brand.transferenciaBanco)} · ${esc(brand.transferenciaTipoCuenta)} N° ${esc(brand.transferenciaNumeroCuenta)}<br>E-mail: ${esc(sellerEmail(doc))}<br>Asunto: ${esc(transferSubject(doc))}</div>
@@ -1081,6 +1088,7 @@ function buildDbPayload(){
   if (quoteDoc && numero === null) throw new Error('La cotización no tiene un folio entero válido. Intenta guardarla nuevamente para reservar otro número.');
   state.vendedorNombre = sellerName(state);
   state.vendedorEmail = sellerEmail(state);
+  state.vendedorTelefono = sellerPhone(state);
   state.asuntoTransferencia = transferSubject(state);
   const documentData = {
     ...state,
@@ -1166,6 +1174,7 @@ function docFromDb(row){
     email: row.cliente_email || d.email || '',
     vendedorNombre: row.vendedor_nombre || d.vendedorNombre || '',
     vendedorEmail: row.vendedor_email || d.vendedorEmail || '',
+    vendedorTelefono: d.vendedorTelefono || '',
     asuntoTransferencia: row.asunto_transferencia || d.asuntoTransferencia || '',
     referencia: row.referencia || d.referencia || '',
     referencias: Array.isArray(d.referencias) ? d.referencias : ((row.referencia || d.referencia) ? String(row.referencia || d.referencia).split('\n') : ['']),
@@ -1223,7 +1232,7 @@ async function newDoc(kind=workflowMode){
     rutEmpresa: brandRut(),
     clienteId:null, contactoId:null,
     cliente:'', contacto:'', rut:'', direccion:'', giro:'', comuna:'', telefono:'', ciudad:'', email:'',
-    vendedorNombre:brand.firmaNombre || '', vendedorEmail:brand.firmaEmail || brand.transferenciaEmailFallback || '', asuntoTransferencia:'',
+    vendedorNombre:brand.firmaNombre || '', vendedorEmail:brand.firmaEmail || brand.transferenciaEmailFallback || '', vendedorTelefono:brand.firmaTelefono || '', asuntoTransferencia:'',
     referencia:'', referencias:[{texto:'', items:[blankItem()]}], garantia:'30 días', condiciones:brand.condicionesDefault || '',
     preOrden:{servicio:'', caracteristicas:PRE_SPEC_LABELS.map(nombre=>({nombre, valor:''})), datosOperativos:[], cargos:[blankCargo()]},
     observaciones: brand.observacionesDefault || EJEMPLO_NOTAS,
