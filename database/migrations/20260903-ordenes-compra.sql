@@ -19,6 +19,8 @@ create table if not exists public.ordenes_compra (
   fecha_entrega date,
   proveedor_snapshot jsonb not null default '{}'::jsonb,
   items jsonb not null default '[]'::jsonb,
+  cotizacion_referencia text,
+  descuento numeric(18,4) not null default 0,
   subtotal numeric(18,4) not null default 0,
   iva numeric(18,4) not null default 0,
   total numeric(18,4) not null default 0,
@@ -31,6 +33,10 @@ create table if not exists public.ordenes_compra (
   updated_at timestamptz not null default now(),
   unique (empresa_id, numero)
 );
+
+alter table public.ordenes_compra
+  add column if not exists cotizacion_referencia text,
+  add column if not exists descuento numeric(18,4) not null default 0;
 
 create index if not exists idx_ordenes_compra_empresa_fecha
   on public.ordenes_compra(empresa_id, fecha_emision desc, created_at desc);
