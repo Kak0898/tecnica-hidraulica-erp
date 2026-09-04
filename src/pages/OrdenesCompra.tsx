@@ -235,16 +235,17 @@ function buildPrintHtml(order: OrdenCompra, company: ReturnType<typeof useEmpres
 *{box-sizing:border-box}
 body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#111827}
 .toolbar{padding:16px;text-align:center}.toolbar button{border:0;border-radius:6px;background:#0f172a;color:white;padding:10px 18px;font-weight:700}
-.sheet{width:216mm;min-height:279mm;margin:0 auto 24px;background:white;padding:10mm 12mm;border:1px solid #cbd5e1}
-.top{display:grid;grid-template-columns:1fr 58mm;gap:8mm;align-items:start}
-.brand{display:grid;grid-template-columns:31mm 1fr;gap:5mm;align-items:start}.brand img{width:30mm;max-height:24mm;object-fit:contain}.brand h1{margin:0;font-size:18px;text-transform:uppercase;font-weight:900}.brand p{margin:1mm 0 0;font-size:10.5px;font-weight:700;text-transform:uppercase;line-height:1.2}
-.quote-block{border:1px solid #d5dbea;border-radius:8px;padding:3.5mm;text-align:center;color:#0f2a66}.quote-label{font-size:11px;font-weight:800;text-transform:uppercase}.quote-number{font-size:25px;font-weight:900;line-height:1.05}.date-block{margin-top:3mm;text-align:left;color:#111827}.date-row{display:grid;grid-template-columns:26mm 1fr;align-items:center;gap:2mm;margin-top:2mm;font-size:10.5px}.date-value{border:1px solid #cbd5e1;border-radius:5px;min-height:7mm;padding:1.5mm;text-align:center}
-.info{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin:7mm 0}.info-table{width:100%;border-collapse:collapse;table-layout:fixed}.info-table th{background:#0f2a66;color:white;text-align:left;font-size:11px;padding:2mm}.info-table td{border:1px solid #cbd5e1;padding:2mm;font-size:11px;min-height:7mm}.info-table .label{width:30mm;background:#f8fafc;font-weight:800;color:#334155}
-.block-title{margin:5mm 0 2mm;background:#0f2a66;color:white;padding:2mm 3mm;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px}
-.main-table{width:100%;border-collapse:collapse;table-layout:fixed}.main-table th,.main-table td{border:1px solid #94a3b8;padding:2mm;font-size:11px;vertical-align:top}.main-table th{background:#eef2ff;color:#0f2a66;text-transform:uppercase}.main-table td{height:8.5mm}.qty{width:18mm}.code{width:30mm}.money{width:30mm}.num{text-align:right;white-space:nowrap}
-.bottom{display:grid;grid-template-columns:1fr 72mm;gap:7mm;margin-top:5mm}.notes{border:1px solid #cbd5e1;min-height:34mm;padding:3mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.totals{width:100%;border-collapse:collapse}.totals td{border:1px solid #94a3b8;padding:2.3mm;font-size:12px}.totals td:first-child{font-weight:800;background:#f8fafc}.totals .grand td{background:#0f2a66;color:white;font-weight:900;font-size:13px}.son{margin-top:3mm;border:1px solid #cbd5e1;padding:2.5mm;font-size:11px;font-weight:800;text-transform:uppercase}
-.terms{margin-top:5mm;border:1px solid #cbd5e1;padding:3mm;min-height:22mm;white-space:pre-wrap;font-size:11px;line-height:1.45}.signs{display:grid;grid-template-columns:1fr 1fr;gap:20mm;margin-top:18mm;text-align:center;font-size:11px}.sign{border-top:1px solid #334155;padding-top:2mm}.sign b{display:block;font-size:12px}.sign span{display:block;color:#475569;margin-top:1mm}
-@media print{body{background:white}.toolbar{display:none}.sheet{border:0;margin:0;width:auto;min-height:auto;page-break-after:always}thead{display:table-header-group}}
+.sheet{width:216mm;min-height:279mm;margin:0 auto 24px;background:white;padding:8mm 10mm;border:1px solid #cbd5e1}
+.top{display:grid;grid-template-columns:1fr 55mm;gap:6mm;align-items:start}
+.brand{display:grid;grid-template-columns:27mm 1fr;gap:4mm;align-items:start}.brand img{width:26mm;max-height:20mm;object-fit:contain}.brand h1{margin:0;font-size:16px;text-transform:uppercase;font-weight:900}.brand p{margin:.5mm 0 0;font-size:9.2px;font-weight:700;text-transform:uppercase;line-height:1.12}
+.quote-block{border:1px solid #d5dbea;border-radius:6px;padding:2.5mm;text-align:center;color:#0f2a66}.quote-label{font-size:10px;font-weight:800;text-transform:uppercase}.quote-number{font-size:22px;font-weight:900;line-height:1.02}.date-block{margin-top:2mm;text-align:left;color:#111827}.date-row{display:grid;grid-template-columns:24mm 1fr;align-items:center;gap:1.5mm;margin-top:1.4mm;font-size:9.2px}.date-value{border:1px solid #cbd5e1;border-radius:4px;min-height:5.5mm;padding:1mm;text-align:center}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:5mm;margin:5mm 0}.info-table{width:100%;border-collapse:collapse;table-layout:fixed}.info-table th{background:#0f2a66;color:white;text-align:left;font-size:9.5px;padding:1.5mm}.info-table td{border:1px solid #cbd5e1;padding:1.5mm;font-size:9.5px;min-height:5.5mm}.info-table .label{width:27mm;background:#f8fafc;font-weight:800;color:#334155}
+.block-title{margin:3.5mm 0 1.5mm;background:#0f2a66;color:white;padding:1.5mm 2.5mm;font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:.3px}
+.main-table{width:100%;border-collapse:collapse;table-layout:fixed}.main-table th,.main-table td{border:1px solid #94a3b8;padding:1.4mm;font-size:9.5px;vertical-align:top}.main-table th{background:#eef2ff;color:#0f2a66;text-transform:uppercase}.main-table td{height:6.5mm}.qty{width:16mm}.code{width:27mm}.money{width:27mm}.num{text-align:right;white-space:nowrap}
+.bottom{display:grid;grid-template-columns:1fr 68mm;gap:5mm;margin-top:3.5mm}.notes{border:1px solid #cbd5e1;min-height:18mm;padding:2mm;white-space:pre-wrap;font-size:9.5px;line-height:1.3}.totals{width:100%;border-collapse:collapse}.totals td{border:1px solid #94a3b8;padding:1.7mm;font-size:10px}.totals td:first-child{font-weight:800;background:#f8fafc}.totals .grand td{background:#0f2a66;color:white;font-weight:900;font-size:11px}.son{margin-top:2mm;border:1px solid #cbd5e1;padding:1.8mm;font-size:9.5px;font-weight:800;text-transform:uppercase}
+.terms{margin-top:3.5mm;border:1px solid #cbd5e1;padding:2mm;min-height:13mm;white-space:pre-wrap;font-size:9.5px;line-height:1.25}.signs{display:grid;grid-template-columns:1fr 1fr;gap:18mm;margin-top:10mm;text-align:center;font-size:9.5px}.sign{border-top:1px solid #334155;padding-top:1.5mm}.sign b{display:block;font-size:10.5px}.sign span{display:block;color:#475569;margin-top:.7mm}
+@page{size:letter;margin:7mm}
+@media print{html,body{background:white;margin:0}.toolbar{display:none}.sheet{border:0;margin:0;width:100%;min-height:0;padding:0;page-break-after:auto;break-after:auto}thead{display:table-header-group}}
 </style>
 </head>
 <body>
@@ -423,8 +424,8 @@ export function OrdenesCompra() {
     return orders.filter((item) => !term || [item.numero, providerName(item), item.proveedor_snapshot?.rut, item.observaciones, item.condiciones].some((value) => String(value || '').toLowerCase().includes(term)))
   }, [orders, query])
 
-  function resetForm() {
-    setForm({ ...emptyForm, numero: nextNumberFromOrders(orders), fecha_emision: today(), items: [{ ...blankItem }] })
+  function resetForm(sourceOrders = orders) {
+    setForm({ ...emptyForm, numero: nextNumberFromOrders(sourceOrders), fecha_emision: today(), items: [{ ...blankItem }] })
     setEditingId('')
   }
 
@@ -474,7 +475,7 @@ export function OrdenesCompra() {
   function edit(order: OrdenCompra, duplicate = false) {
     const provider = order.proveedor_id || providers.find((item) => item.razon_social === order.proveedor_snapshot?.razon_social)?.id || ''
     setForm({
-      numero: duplicate ? nextNumber() : order.numero,
+      numero: duplicate ? nextNumberFromOrders(orders) : order.numero,
       proveedor_id: provider,
       fecha_emision: duplicate ? today() : order.fecha_emision,
       fecha_entrega: order.fecha_entrega || '',
@@ -522,9 +523,11 @@ export function OrdenesCompra() {
     const { data, error } = await queryBuilder
     setSaving(false)
     if (error) return setMessage(moduleMessage(error))
-    setPreviewId(data?.[0]?.id || '')
+    const savedOrder = data?.[0] as OrdenCompra | undefined
+    const nextOrders = savedOrder && !editingId ? [savedOrder, ...orders] : orders
+    setPreviewId(savedOrder?.id || '')
     setMessage(editingId ? 'Orden de compra actualizada.' : 'Orden de compra guardada.')
-    resetForm()
+    resetForm(nextOrders)
     await load()
   }
 
