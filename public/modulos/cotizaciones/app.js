@@ -1512,7 +1512,7 @@ function render(renderOptions={}){
         </div>
         <div class="field"><label>Fecha emisión</label><input type="date" value="${esc(state.fecha)}" oninput="setSilent('fecha',this.value)" onchange="render({preserveScroll:true})"></div>
         <div class="field"><label>Moneda</label><select onchange="setSilent('moneda',this.value);render({preserveScroll:true})"><option value="CLP" ${currentCurrency(state)==='CLP'?'selected':''}>Pesos CLP ($)</option><option value="UF" ${currentCurrency(state)==='UF'?'selected':''}>UF</option><option value="USD" ${currentCurrency(state)==='USD'?'selected':''}>Dólares USD (US$)</option></select></div>
-        ${isFinal ? `<div class="field"><label>Fecha vencimiento</label><input type="date" value="${esc(state.vcto)}" oninput="setSilent('vcto',this.value)" onchange="render({preserveScroll:true})"></div>` : ''}
+        <div class="field"><label>Fecha vencimiento</label><input type="date" value="${esc(state.vcto)}" oninput="setSilent('vcto',this.value)" onchange="render({preserveScroll:true})"></div>
       </div>
 
       <div class="section-title">${isFinal ? 'Cliente cotización final' : 'Cliente presupuesto'}</div>
