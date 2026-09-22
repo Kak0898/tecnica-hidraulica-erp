@@ -214,6 +214,13 @@ const comprobantes = {
     const result = await apiRequest('/comprobantes/recalcular', { method: 'POST', body: JSON.stringify({ vendedor_id: sellerId, month }) })
     return { data: result.data?.data || null, error: result.error }
   },
+  async updatePaymentStatus(quoteId: string | number, receiptId: string, paid: boolean) {
+    const result = await apiRequest(`/comprobantes/${encodeURIComponent(quoteId)}/${encodeURIComponent(receiptId)}/pago`, {
+      method: 'PATCH',
+      body: JSON.stringify({ pagada: paid }),
+    })
+    return { data: result.data?.data || null, error: result.error }
+  },
 }
 
 const cotizaciones = {

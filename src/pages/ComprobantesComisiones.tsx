@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BadgeDollarSign, Calculator, CalendarRange, ExternalLink, FileCheck2, LoaderCircle, Printer, RefreshCw, Save, Trash2, UploadCloud, UsersRound } from 'lucide-react'
+import { BadgeDollarSign, Calculator, CalendarRange, CheckCircle2, ExternalLink, FileCheck2, LoaderCircle, Printer, RefreshCw, RotateCcw, Save, Trash2, UploadCloud, UsersRound } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { useEmpresa } from '../lib/empresa'
@@ -48,6 +48,9 @@ type Receipt = {
   comision_clp: number
   comision_calculada_clp?: number
   comision_origen?: 'regla_vendedor' | 'manual'
+  comision_estado?: 'pendiente' | 'pagada'
+  comision_pagada_en?: string | null
+  comision_pagada_por?: string | null
   reglas_aplicadas?: CommissionRules
   archivo_path: string
   archivo_nombre: string
@@ -166,6 +169,8 @@ export function ComprobantesComisiones() {
   const [ruleForm, setRuleForm] = useState<CommissionRules>(defaultRules)
   const [savingRules, setSavingRules] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
+  const [updatingPaymentId, setUpdatingPaymentId] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<'todas' | 'pendiente' | 'pagada'>('todas')
 
   async function load() {
     setLoading(true)
@@ -206,6 +211,12 @@ export function ComprobantesComisiones() {
   )
   const uniqueClients = useMemo(() => new Set(monthlyRows.map((receipt) => receipt.cliente_id || receipt.cliente_rut || receipt.cliente_nombre).filter(Boolean)).size, [monthlyRows])
   const monthlyCommission = monthlyRows.reduce((sum, receipt) => sum + Number(receipt.comision_clp || 0), 0)
+  const monthlyPaidCommission = monthlyRows.filter((receipt) => receipt.comision_estado === 'pagada').reduce((sum, receipt) => sum + Number(receipt.comision_clp || 0), 0)
+  const monthlyPendingCommission = monthlyCommission - monthlyPaidCommission
+  const filteredReceiptRows = useMemo(
+    () => paymentFilter === 'todas' ? receiptRows : receiptRows.filter((receipt) => (receipt.comision_estado || 'pendiente') === paymentFilter),
+    [paymentFilter, receiptRows],
+  )
   const baseSalary = Number(selectedCalculatorSeller?.sueldo_base || 0)
   const projectedTotal = baseSalary + monthlyCommission
   const rutState = rutStatus(form.rut_transferencia)
@@ -294,6 +305,17 @@ export function ComprobantesComisiones() {
     await load()
   }
 
+  async function updatePaymentStatus(receipt: Receipt, paid: boolean) {
+    const action = paid ? 'marcar esta comisión como pagada' : 'volver esta comisión a pendiente'
+    if (!window.confirm(`¿Confirmas que deseas ${action}?`)) return
+    setUpdatingPaymentId(receipt.id)
+    const { error } = await supabase.comprobantes.updatePaymentStatus(receipt.cotizacion_id, receipt.id, paid)
+    if (error) setMessage(`No se pudo actualizar la comisión: ${error.message}`)
+    else setMessage(paid ? 'Comisión marcada como pagada.' : 'Comisión marcada nuevamente como pendiente.')
+    await load()
+    setUpdatingPaymentId('')
+  }
+
   function printMonthlyReport() {
     if (!selectedCalculatorSeller) {
       setMessage('Selecciona un vendedor para imprimir el informe.')
@@ -373,7 +395,7 @@ export function ComprobantesComisiones() {
       <div class="box"><b>Vendedor</b><strong>${esc(selectedCalculatorSeller.nombre)}</strong><span class="muted">${esc(selectedCalculatorSeller.email || '')}</span></div>
       <div class="box"><b>Período</b><strong>${esc(monthLabel(month))}</strong></div>
       <div class="box"><b>Comprobantes</b><strong>${rows.length}</strong></div>
-      <div class="box"><b>Total a pagar</b><strong>${esc(clp(monthlyCommission))}</strong></div>
+      <div class="box"><b>Pendiente de pago</b><strong>${esc(clp(monthlyPendingCommission))}</strong><span class="muted">Pagado: ${esc(clp(monthlyPaidCommission))}</span></div>
     </section>
 
     <h2>Reglas vigentes del vendedor</h2>
@@ -403,6 +425,7 @@ export function ComprobantesComisiones() {
           <th>Negocio</th>
           <th>Base</th>
           <th>Fórmula</th>
+          <th>Estado</th>
           <th class="num">Comisión</th>
         </tr>
       </thead>
@@ -413,9 +436,10 @@ export function ComprobantesComisiones() {
           <td>${esc(operationLabel(receipt.tipo_operacion))}${receipt.comision_origen === 'manual' ? '<br><span class="muted">Ajuste manual</span>' : ''}</td>
           <td>${esc(base)}</td>
           <td>${esc(formula)}</td>
+          <td><b>${receipt.comision_estado === 'pagada' ? 'Pagada' : 'Pendiente'}</b>${receipt.comision_pagada_en ? `<br><span class="muted">${esc(dateLabel(receipt.comision_pagada_en.slice(0, 10)))}</span>` : ''}</td>
           <td class="num"><b>${esc(clp(receipt.comision_clp))}</b></td>
-        </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:24px">No hay comprobantes clasificados para este vendedor y mes.</td></tr>'}
-        <tr class="total-row"><td colspan="5">Total del período</td><td class="num">${esc(clp(monthlyCommission))}</td></tr>
+        </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:24px">No hay comprobantes clasificados para este vendedor y mes.</td></tr>'}
+        <tr class="total-row"><td colspan="6">Total del período</td><td class="num">${esc(clp(monthlyCommission))}</td></tr>
       </tbody>
     </table>
 
@@ -507,13 +531,13 @@ export function ComprobantesComisiones() {
     <Card>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-100 p-3 text-emerald-700"><CalendarRange size={22} /></div><div><h3 className="text-xl font-black">Calculadora mensual por vendedor</h3><p className="mt-1 text-sm text-slate-500">Sueldo base + arriendos + trabajos hidráulicos + ventas de apiladores.</p></div></div><div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={printMonthlyReport} disabled={!calculatorSellerId} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 disabled:opacity-50"><Printer size={17} />Imprimir informe</button><button type="button" onClick={recalculateMonth} disabled={recalculating || !calculatorSellerId} className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 disabled:opacity-50"><RefreshCw size={17} className={recalculating ? 'animate-spin' : ''} />{recalculating ? 'Recalculando...' : 'Recalcular mes'}</button></div></div>
       <div className="grid gap-4 md:grid-cols-2 xl:w-2/3"><label className={labelClass}>Vendedor<select value={calculatorSellerId} onChange={(event) => setCalculatorSellerId(event.target.value)} className={inputClass}><option value="">Seleccionar</option>{payload.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.nombre}</option>)}</select></label><label className={labelClass}>Mes<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className={inputClass} /></label></div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-2xl bg-slate-100 p-4"><p className="text-xs font-black uppercase text-slate-500">Sueldo base</p><p className="mt-2 text-2xl font-black">{clp(baseSalary)}</p></div><div className="rounded-2xl bg-blue-50 p-4"><p className="text-xs font-black uppercase text-blue-700">Clientes del mes</p><p className="mt-2 text-2xl font-black text-blue-950">{uniqueClients}</p><p className="mt-1 text-xs text-blue-700">{monthlyRows.length} comprobante(s)</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs font-black uppercase text-amber-700">Comisiones</p><p className="mt-2 text-2xl font-black text-amber-950">{clp(monthlyCommission)}</p></div><div className="rounded-2xl bg-emerald-100 p-4"><p className="text-xs font-black uppercase text-emerald-800">Total proyectado</p><p className="mt-2 text-2xl font-black text-emerald-950">{clp(projectedTotal)}</p></div></div>
-      <div className="mt-5 overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Fecha / cotización</th><th className="p-3">Cliente</th><th className="p-3">Negocio</th><th className="p-3">Base de cálculo</th><th className="p-3 text-right">Comisión</th></tr></thead><tbody>{monthlyRows.map((receipt) => <tr key={receipt.id} className="border-b"><td className="p-3"><p className="font-black">N° {receipt.cotizacion_numero}</p><p className="mt-1 text-xs text-slate-500">{dateLabel(receipt.fecha_transferencia)}</p></td><td className="p-3"><p className="font-semibold">{receipt.cliente_nombre || 'Sin cliente'}</p><p className="mt-1 text-xs text-slate-500">{receipt.cliente_rut || ''}</p></td><td className="p-3 font-semibold">{operationLabel(receipt.tipo_operacion)}</td><td className="p-3">{receipt.tipo_operacion === 'arriendo' ? `${receipt.meses_arriendo} mes(es)` : receipt.tipo_operacion === 'venta_apilador' ? `${receipt.cantidad_apiladores} unidad(es)` : `Ganancia: ${clp(receipt.ganancia_calculo_clp)}`}</td><td className="p-3 text-right"><p className="font-black text-emerald-700">{clp(receipt.comision_clp)}</p>{receipt.comision_origen === 'manual' && <span className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black uppercase text-violet-700">Manual</span>}</td></tr>)}{!loading && !monthlyRows.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No hay comprobantes clasificados para este vendedor y mes.</td></tr>}</tbody></table></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><div className="rounded-2xl bg-slate-100 p-4"><p className="text-xs font-black uppercase text-slate-500">Sueldo base</p><p className="mt-2 text-2xl font-black">{clp(baseSalary)}</p></div><div className="rounded-2xl bg-blue-50 p-4"><p className="text-xs font-black uppercase text-blue-700">Clientes del mes</p><p className="mt-2 text-2xl font-black text-blue-950">{uniqueClients}</p><p className="mt-1 text-xs text-blue-700">{monthlyRows.length} comprobante(s)</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs font-black uppercase text-amber-700">Pendiente</p><p className="mt-2 text-2xl font-black text-amber-950">{clp(monthlyPendingCommission)}</p></div><div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs font-black uppercase text-emerald-700">Ya pagado</p><p className="mt-2 text-2xl font-black text-emerald-900">{clp(monthlyPaidCommission)}</p></div><div className="rounded-2xl bg-emerald-100 p-4"><p className="text-xs font-black uppercase text-emerald-800">Total proyectado</p><p className="mt-2 text-2xl font-black text-emerald-950">{clp(projectedTotal)}</p></div></div>
+      <div className="mt-5 overflow-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Fecha / cotización</th><th className="p-3">Cliente</th><th className="p-3">Negocio</th><th className="p-3">Base de cálculo</th><th className="p-3">Estado</th><th className="p-3 text-right">Comisión</th></tr></thead><tbody>{monthlyRows.map((receipt) => <tr key={receipt.id} className="border-b"><td className="p-3"><p className="font-black">N° {receipt.cotizacion_numero}</p><p className="mt-1 text-xs text-slate-500">{dateLabel(receipt.fecha_transferencia)}</p></td><td className="p-3"><p className="font-semibold">{receipt.cliente_nombre || 'Sin cliente'}</p><p className="mt-1 text-xs text-slate-500">{receipt.cliente_rut || ''}</p></td><td className="p-3 font-semibold">{operationLabel(receipt.tipo_operacion)}</td><td className="p-3">{receipt.tipo_operacion === 'arriendo' ? `${receipt.meses_arriendo} mes(es)` : receipt.tipo_operacion === 'venta_apilador' ? `${receipt.cantidad_apiladores} unidad(es)` : `Ganancia: ${clp(receipt.ganancia_calculo_clp)}`}</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${receipt.comision_estado === 'pagada' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{receipt.comision_estado === 'pagada' ? 'Pagada' : 'Pendiente'}</span>{receipt.comision_pagada_en && <p className="mt-1 text-xs text-slate-500">{dateLabel(receipt.comision_pagada_en.slice(0, 10))}</p>}</td><td className="p-3 text-right"><p className="font-black text-emerald-700">{clp(receipt.comision_clp)}</p>{receipt.comision_origen === 'manual' && <span className="mt-1 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black uppercase text-violet-700">Manual</span>}</td></tr>)}{!loading && !monthlyRows.length && <tr><td colSpan={6} className="p-8 text-center text-slate-500">No hay comprobantes clasificados para este vendedor y mes.</td></tr>}</tbody></table></div>
     </Card>
 
     <Card>
-      <div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-violet-100 p-3 text-violet-700"><UsersRound size={22} /></div><div><h3 className="text-xl font-black">Comprobantes registrados</h3><p className="mt-1 text-sm text-slate-500">Cada archivo solo se abre mediante un enlace privado temporal.</p></div></div>
-      <div className="overflow-auto"><table className="w-full min-w-[1100px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Transferencia</th><th className="p-3">Cotización / cliente</th><th className="p-3">Vendedor</th><th className="p-3">Clasificación</th><th className="p-3">Comisión</th><th className="p-3 text-right">Archivo</th></tr></thead><tbody>{receiptRows.map((receipt) => <tr key={receipt.id} className="border-b align-top hover:bg-slate-50"><td className="p-3"><p className="font-black">{dateLabel(receipt.fecha_transferencia)}</p><p className="mt-1 text-xs text-slate-500">RUT {receipt.rut_transferencia}</p></td><td className="p-3"><p className="font-black">N° {receipt.cotizacion_numero}</p><p className="mt-1 text-xs text-slate-500">{receipt.cliente_nombre || 'Sin cliente'} · {receipt.cliente_rut || 'sin RUT'}</p></td><td className="p-3"><p className="font-semibold">{receipt.vendedor_nombre}</p><p className="mt-1 text-xs text-slate-500">{receipt.vendedor_email || ''}</p></td><td className="p-3"><span className="inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">{operationLabel(receipt.tipo_operacion)}</span></td><td className="p-3 font-black text-emerald-700">{clp(receipt.comision_clp)}</td><td className="p-3"><div className="flex justify-end gap-2"><button onClick={() => openReceipt(receipt)} title="Abrir comprobante" className="rounded-lg bg-blue-100 p-2 text-blue-700"><ExternalLink size={16} /></button><button onClick={() => deleteReceipt(receipt)} title="Eliminar comprobante" className="rounded-lg bg-red-100 p-2 text-red-700"><Trash2 size={16} /></button></div></td></tr>)}{!loading && !receiptRows.length && <tr><td colSpan={6} className="p-8 text-center text-slate-500">Aún no hay comprobantes de transferencia guardados.</td></tr>}</tbody></table></div>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-violet-100 p-3 text-violet-700"><UsersRound size={22} /></div><div><h3 className="text-xl font-black">Comprobantes registrados</h3><p className="mt-1 text-sm text-slate-500">Cada archivo solo se abre mediante un enlace privado temporal.</p></div></div><div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">{(['todas', 'pendiente', 'pagada'] as const).map((filter) => <button key={filter} type="button" onClick={() => setPaymentFilter(filter)} className={`rounded-lg px-3 py-2 text-xs font-black capitalize ${paymentFilter === filter ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}>{filter === 'todas' ? 'Todas' : filter === 'pagada' ? 'Pagadas' : 'Pendientes'}</button>)}</div></div>
+      <div className="overflow-auto"><table className="w-full min-w-[1250px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-500"><th className="p-3">Transferencia</th><th className="p-3">Cotización / cliente</th><th className="p-3">Vendedor</th><th className="p-3">Clasificación</th><th className="p-3">Comisión</th><th className="p-3">Estado de pago</th><th className="p-3 text-right">Acciones</th></tr></thead><tbody>{filteredReceiptRows.map((receipt) => <tr key={receipt.id} className="border-b align-top hover:bg-slate-50"><td className="p-3"><p className="font-black">{dateLabel(receipt.fecha_transferencia)}</p><p className="mt-1 text-xs text-slate-500">RUT {receipt.rut_transferencia}</p></td><td className="p-3"><p className="font-black">N° {receipt.cotizacion_numero}</p><p className="mt-1 text-xs text-slate-500">{receipt.cliente_nombre || 'Sin cliente'} · {receipt.cliente_rut || 'sin RUT'}</p></td><td className="p-3"><p className="font-semibold">{receipt.vendedor_nombre}</p><p className="mt-1 text-xs text-slate-500">{receipt.vendedor_email || ''}</p></td><td className="p-3"><span className="inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">{operationLabel(receipt.tipo_operacion)}</span></td><td className="p-3 font-black text-emerald-700">{clp(receipt.comision_clp)}</td><td className="p-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${receipt.comision_estado === 'pagada' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{receipt.comision_estado === 'pagada' ? 'Pagada' : 'Pendiente'}</span>{receipt.comision_pagada_en && <p className="mt-1 text-xs text-slate-500">Pagada el {dateLabel(receipt.comision_pagada_en.slice(0, 10))}</p>}</td><td className="p-3"><div className="flex justify-end gap-2">{payload.can_manage_all && <button disabled={updatingPaymentId === receipt.id} onClick={() => updatePaymentStatus(receipt, receipt.comision_estado !== 'pagada')} title={receipt.comision_estado === 'pagada' ? 'Volver a pendiente' : 'Marcar como pagada'} className={`rounded-lg p-2 disabled:opacity-50 ${receipt.comision_estado === 'pagada' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{updatingPaymentId === receipt.id ? <LoaderCircle className="animate-spin" size={16} /> : receipt.comision_estado === 'pagada' ? <RotateCcw size={16} /> : <CheckCircle2 size={16} />}</button>}<button onClick={() => openReceipt(receipt)} title="Abrir comprobante" className="rounded-lg bg-blue-100 p-2 text-blue-700"><ExternalLink size={16} /></button><button onClick={() => deleteReceipt(receipt)} title="Eliminar comprobante" className="rounded-lg bg-red-100 p-2 text-red-700"><Trash2 size={16} /></button></div></td></tr>)}{!loading && !filteredReceiptRows.length && <tr><td colSpan={7} className="p-8 text-center text-slate-500">No hay comprobantes con este estado de pago.</td></tr>}</tbody></table></div>
     </Card>
 
     <div className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-600"><BadgeDollarSign className="mr-2 inline text-slate-500" size={17} />El total es una proyección interna. Antes de liquidar, Recursos Humanos debe validar costos, duración del arriendo y cantidad de equipos vendidos.</div>

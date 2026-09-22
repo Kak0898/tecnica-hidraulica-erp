@@ -1147,6 +1147,57 @@ app.post('/api/comprobantes/recalcular', authenticate, async (req, res) => {
   }
 })
 
+app.patch('/api/comprobantes/:quoteId/:receiptId/pago', authenticate, async (req, res) => {
+  let client
+  try {
+    const scope = await receiptAccess(req.user)
+    if (!scope.canManageAll) {
+      return res.status(403).json({ error: 'Solo un administrador puede cambiar el estado de pago de una comisión.' })
+    }
+    if (typeof req.body?.pagada !== 'boolean') {
+      return res.status(400).json({ error: 'Indica si la comisión está pagada o pendiente.' })
+    }
+
+    client = await pool.connect()
+    await client.query('begin')
+    const quote = (await client.query(`
+      select id, data
+        from public.cotizacion_documentos
+       where id = $1 and empresa_id = $2
+       for update
+    `, [req.params.quoteId, scope.companyId])).rows[0]
+    if (!quote) throw Object.assign(new Error('Cotización no encontrada.'), { status: 404 })
+
+    let updatedReceipt = null
+    const receipts = receiptList(quote.data).map((receipt) => {
+      if (String(receipt.id) !== String(req.params.receiptId)) return receipt
+      updatedReceipt = {
+        ...receipt,
+        comision_estado: req.body.pagada ? 'pagada' : 'pendiente',
+        comision_pagada_en: req.body.pagada ? new Date().toISOString() : null,
+        comision_pagada_por: req.body.pagada ? req.user.id : null,
+      }
+      return updatedReceipt
+    })
+    if (!updatedReceipt) throw Object.assign(new Error('Comprobante no encontrado.'), { status: 404 })
+
+    await client.query(`
+      update public.cotizacion_documentos
+         set data = jsonb_set(coalesce(data, '{}'::jsonb), '{comprobantes_transferencia}', $3::jsonb, true),
+             updated_at = now()
+       where id = $1 and empresa_id = $2
+    `, [quote.id, scope.companyId, JSON.stringify(receipts)])
+    await client.query('commit')
+    res.json({ data: { receipt: updatedReceipt } })
+  } catch (error) {
+    if (client) await client.query('rollback').catch(() => {})
+    const formatted = error.status ? { status: error.status, message: error.message } : databaseError(error)
+    res.status(formatted.status).json({ error: formatted.message })
+  } finally {
+    client?.release()
+  }
+})
+
 app.delete('/api/comprobantes/:quoteId/:receiptId', authenticate, async (req, res) => {
   let client
   try {
