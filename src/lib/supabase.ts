@@ -235,6 +235,14 @@ const whatsapp = {
     const result = await apiRequest(`/whatsapp/${encodeURIComponent(messageId)}/send`, { method: 'POST' })
     return { data: result.data?.data || null, error: result.error }
   },
+  async conversations() {
+    const result = await apiRequest('/whatsapp/conversations')
+    return { data: result.data?.data || [], error: result.error }
+  },
+  async conversation(conversationId: string) {
+    const result = await apiRequest(`/whatsapp/conversations?conversation_id=${encodeURIComponent(conversationId)}`)
+    return { data: result.data?.data || null, error: result.error }
+  },
 }
 
 function storageBucket(bucket: string) {

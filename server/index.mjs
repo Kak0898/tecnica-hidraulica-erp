@@ -122,6 +122,31 @@ app.post('/api/whatsapp/:messageId/send', authenticate, async (req, res) => {
   }
 })
 
+app.get('/api/whatsapp/conversations', authenticate, async (req, res) => {
+  const apiUrl = String(process.env.TH_API_URL || '').replace(/\/$/, '')
+  const apiKey = String(process.env.TH_API_INTERNAL_KEY || '')
+  if (!apiUrl || !apiKey) return res.status(503).json({ error: 'La integración de WhatsApp aún no está configurada en el servidor.' })
+
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = await getCompanyAccess(req.user.id, companyId)
+    if (!companyId || !hasAnyModule(access, ['whatsapp'])) return res.status(403).json({ error: 'No tienes permiso para consultar WhatsApp.' })
+    const query = new URLSearchParams()
+    if (req.query.conversation_id) query.set('conversation_id', String(req.query.conversation_id))
+    else query.set('limit', String(Math.min(Math.max(Number(req.query.limit || 100), 1), 200)))
+    const response = await fetch(`${apiUrl}/api/intranet/whatsapp/conversations?${query}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(20_000),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) return res.status(response.status === 404 ? 404 : 502).json({ error: payload?.error || 'No fue posible cargar WhatsApp.' })
+    res.json({ data: payload.data })
+  } catch (error) {
+    console.error('[api/whatsapp/conversations]', error?.message)
+    res.status(502).json({ error: 'No fue posible conectar con la bandeja de WhatsApp.' })
+  }
+})
+
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
