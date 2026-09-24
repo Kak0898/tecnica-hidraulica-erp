@@ -73,6 +73,7 @@ export function WhatsApp() {
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sendingId, setSendingId] = useState('')
   const [message, setMessage] = useState('')
 
   async function load() {
@@ -174,6 +175,20 @@ export function WhatsApp() {
     }
 
     setMensajes((current) => current.map((item) => item.id === id ? { ...item, estado } : item))
+  }
+
+  async function sendNow(id: string) {
+    setSendingId(id)
+    setMessage('')
+    const { data, error } = await supabase.whatsapp.send(id)
+    setSendingId('')
+    if (error) {
+      setMessage(error.message)
+      await load()
+      return
+    }
+    setMensajes((current) => current.map((item) => item.id === id ? { ...item, ...data, estado: 'enviado' } : item))
+    setMessage('Mensaje enviado correctamente por WhatsApp.')
   }
 
   async function openWhatsApp(item: Mensaje) {
@@ -281,10 +296,11 @@ export function WhatsApp() {
                     <td className="py-3">{item.scheduled_at || '-'}</td>
 	                    <td className="py-3">
 	                      <div className="flex gap-2">
-	                        <button onClick={() => openWhatsApp(item)} className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">
-                            <ExternalLink size={14} />
-                            Abrir
+	                        <button onClick={() => sendNow(item.id)} disabled={sendingId === item.id || item.estado === 'enviado' || item.estado === 'cancelado'} className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                            <Send size={14} />
+                            {sendingId === item.id ? 'Enviando...' : 'Enviar ahora'}
                           </button>
+	                        <button onClick={() => openWhatsApp(item)} title="Abrir borrador en WhatsApp Business" className="rounded border border-slate-300 bg-white px-3 py-2 text-slate-700"><ExternalLink size={14} /></button>
 	                        <button onClick={() => updateEstado(item.id, 'cancelado')} className="rounded bg-slate-700 px-3 py-2 text-xs font-semibold text-white"><XCircle size={14} /></button>
 	                      </div>
                     </td>

@@ -230,6 +230,13 @@ const cotizaciones = {
   },
 }
 
+const whatsapp = {
+  async send(messageId: string) {
+    const result = await apiRequest(`/whatsapp/${encodeURIComponent(messageId)}/send`, { method: 'POST' })
+    return { data: result.data?.data || null, error: result.error }
+  },
+}
+
 function storageBucket(bucket: string) {
   return {
     async upload(path: string, file: File, options: { upsert?: boolean } = {}) {
@@ -268,5 +275,6 @@ export const supabase: any = {
   },
   comprobantes,
   cotizaciones,
+  whatsapp,
   storage: { from: storageBucket },
 }

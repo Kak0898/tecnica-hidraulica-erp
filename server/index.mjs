@@ -63,6 +63,65 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
+app.post('/api/whatsapp/:messageId/send', authenticate, async (req, res) => {
+  const apiUrl = String(process.env.TH_API_URL || '').replace(/\/$/, '')
+  const apiKey = String(process.env.TH_API_INTERNAL_KEY || '')
+  if (!apiUrl || !apiKey) return res.status(503).json({ error: 'La integración de WhatsApp aún no está configurada en el servidor.' })
+
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = await getCompanyAccess(req.user.id, companyId)
+    if (!companyId || !hasAnyModule(access, ['whatsapp'])) return res.status(403).json({ error: 'No tienes permiso para enviar mensajes de esta empresa.' })
+
+    const queued = await pool.query(
+      `select id, telefono, mensaje, estado
+         from public.whatsapp_mensajes
+        where id = $1 and empresa_id = $2
+        limit 1`,
+      [req.params.messageId, companyId],
+    )
+    const message = queued.rows[0]
+    if (!message) return res.status(404).json({ error: 'Mensaje no encontrado.' })
+    if (message.estado === 'cancelado') return res.status(409).json({ error: 'El mensaje está cancelado.' })
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20_000)
+    let response
+    try {
+      response = await fetch(`${apiUrl}/api/intranet/whatsapp/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: message.telefono, message: message.mensaje }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const detail = payload?.error || `TH API respondió con estado ${response.status}.`
+      await pool.query(
+        `update public.whatsapp_mensajes set estado = 'fallido', error = $3 where id = $1 and empresa_id = $2`,
+        [message.id, companyId, detail],
+      )
+      return res.status(502).json({ error: detail })
+    }
+
+    const updated = await pool.query(
+      `update public.whatsapp_mensajes
+          set estado = 'enviado', provider_message_id = $3, sent_at = now(), error = null
+        where id = $1 and empresa_id = $2
+        returning *`,
+      [message.id, companyId, payload?.data?.provider_message_id || null],
+    )
+    res.json({ data: updated.rows[0] })
+  } catch (error) {
+    const timedOut = error?.name === 'AbortError'
+    console.error('[api/whatsapp/send]', timedOut ? 'timeout' : error?.message)
+    res.status(502).json({ error: timedOut ? 'WhatsApp tardó demasiado en responder.' : 'No fue posible conectar con el servicio de WhatsApp.' })
+  }
+})
+
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
