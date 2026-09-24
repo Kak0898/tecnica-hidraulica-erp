@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Clock3, ExternalLink, Inbox, MessageCircle, RefreshCw, Send, XCircle } from 'lucide-react'
+import { Clock3, ExternalLink, Inbox, MessageCircle, RefreshCw, Send, Sparkles, XCircle } from 'lucide-react'
 import { Card } from '../components/Card'
 import { FeedbackToast } from '../components/FeedbackToast'
 import { supabase } from '../lib/supabase'
@@ -66,6 +66,7 @@ export function WhatsApp() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState('')
+  const [generatingDraft, setGeneratingDraft] = useState(false)
   const [message, setMessage] = useState('')
 
   async function selectConversation(id: string) {
@@ -144,6 +145,18 @@ export function WhatsApp() {
     await load()
   }
 
+  async function generateDraft() {
+    if (!selectedId) return
+    setGeneratingDraft(true)
+    setMessage('')
+    const { data, error } = await supabase.whatsapp.draft(selectedId)
+    setGeneratingDraft(false)
+    if (error) { setMessage(error.message); return }
+    setReply(data?.draft || '')
+    const usage = data?.usage
+    setMessage(usage ? `Borrador generado con Claude (${usage.input_tokens} tokens de entrada, ${usage.output_tokens} de salida).` : 'Borrador generado con Claude.')
+  }
+
   async function cancel(id: string) {
     const { error } = await supabase.from('whatsapp_mensajes').update({ estado: 'cancelado', sent_at: null }).eq('id', id)
     if (error) { setMessage(error.message); return }
@@ -181,7 +194,7 @@ export function WhatsApp() {
               <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-5">
                 {loadingDetail ? <div className="text-center text-slate-500">Cargando historial...</div> : detail.messages.map((item) => <div key={item.id} className={`flex ${item.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[78%] rounded px-4 py-3 shadow-sm ${item.direction === 'outgoing' ? 'bg-emerald-100 text-emerald-950' : 'bg-white text-slate-800'}`}><p className="whitespace-pre-wrap text-sm">{item.content || `[${item.message_type}]`}</p><div className="mt-1 text-right text-[10px] text-slate-500">{formatDate(item.created_at)}{item.ai_generated ? ' · IA' : ''}</div></div></div>)}
               </div>
-              <div className="border-t bg-white p-4"><div className="flex gap-2"><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Escribe una respuesta" className="min-h-20 flex-1 resize-none rounded border border-slate-300 px-3 py-2" /><button onClick={sendReply} disabled={saving || !reply.trim()} title="Enviar respuesta" className="self-stretch rounded bg-emerald-600 px-4 text-white disabled:opacity-50"><Send size={20} /></button></div></div>
+              <div className="border-t bg-white p-4"><button onClick={generateDraft} disabled={generatingDraft || loadingDetail} className="mb-3 inline-flex items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 disabled:opacity-50"><Sparkles size={16} />{generatingDraft ? 'Claude está redactando...' : 'Sugerir con Claude'}</button><div className="flex gap-2"><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Escribe o genera una respuesta" className="min-h-20 flex-1 resize-none rounded border border-slate-300 px-3 py-2" /><button onClick={sendReply} disabled={saving || !reply.trim()} title="Aprobar y enviar respuesta" className="self-stretch rounded bg-emerald-600 px-4 text-white disabled:opacity-50"><Send size={20} /></button></div><p className="mt-2 text-xs text-slate-500">El borrador no se envía hasta que lo revises y presiones el botón de envío.</p></div>
             </> : <div className="flex flex-1 items-center justify-center p-8 text-center text-slate-500"><div><MessageCircle className="mx-auto mb-3" size={34} /><p>Selecciona una conversación para ver su historial.</p></div></div>}
           </section>
         </div>

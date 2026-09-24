@@ -243,6 +243,10 @@ const whatsapp = {
     const result = await apiRequest(`/whatsapp/conversations?conversation_id=${encodeURIComponent(conversationId)}`)
     return { data: result.data?.data || null, error: result.error }
   },
+  async draft(conversationId: string) {
+    const result = await apiRequest(`/whatsapp/conversations/${encodeURIComponent(conversationId)}/draft`, { method: 'POST' })
+    return { data: result.data?.data || null, error: result.error }
+  },
 }
 
 function storageBucket(bucket: string) {

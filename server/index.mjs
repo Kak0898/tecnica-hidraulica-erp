@@ -147,6 +147,29 @@ app.get('/api/whatsapp/conversations', authenticate, async (req, res) => {
   }
 })
 
+app.post('/api/whatsapp/conversations/:conversationId/draft', authenticate, async (req, res) => {
+  const apiUrl = String(process.env.TH_API_URL || '').replace(/\/$/, '')
+  const apiKey = String(process.env.TH_API_INTERNAL_KEY || '')
+  if (!apiUrl || !apiKey) return res.status(503).json({ error: 'La integración de WhatsApp aún no está configurada en el servidor.' })
+  try {
+    const companyId = await getActiveCompany(req.user.id)
+    const access = await getCompanyAccess(req.user.id, companyId)
+    if (!companyId || !hasAnyModule(access, ['whatsapp'])) return res.status(403).json({ error: 'No tienes permiso para usar el asistente de WhatsApp.' })
+    const response = await fetch(`${apiUrl}/api/intranet/whatsapp/draft`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: req.params.conversationId }),
+      signal: AbortSignal.timeout(30_000),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) return res.status(response.status === 503 ? 503 : 502).json({ error: payload?.error || 'Claude no pudo generar el borrador.' })
+    res.json({ data: payload.data })
+  } catch (error) {
+    console.error('[api/whatsapp/draft]', error?.message)
+    res.status(502).json({ error: 'No fue posible conectar con Claude.' })
+  }
+})
+
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
