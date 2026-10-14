@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { Archive, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, ServerCog, Settings, Shirt, ShoppingCart, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
+import { Archive, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarDays, CarFront, ChevronDown, ClipboardCheck, FileCheck2, FileSignature, FileSpreadsheet, FileText, Gauge, Handshake, LogOut, Megaphone, Menu, MessageCircle, PackageSearch, PanelLeftClose, ReceiptText, ScanLine, ServerCog, Settings, Shirt, ShoppingCart, Sparkles, UserCog, UsersRound, WalletCards, Wrench, X } from 'lucide-react';
 import { useEmpresa } from '../lib/empresa';
 import { usePermisos } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
@@ -41,6 +41,7 @@ const groups = [
     label: 'Administración',
     items: [
       { key: 'flota-vehiculos', label: 'Flota de vehículos', icon: CarFront },
+      { key: 'inventario', label: 'Inventario', icon: ScanLine },
       { key: 'maquinaria', label: 'Maquinaria', icon: Boxes },
       { key: 'repuestos', label: 'Repuestos', icon: PackageSearch },
       { key: 'epp-ropa', label: 'EPP y ropa', icon: Shirt },

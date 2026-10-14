@@ -39,6 +39,7 @@ export const MODULE_GROUPS = [
     label: 'Administración y operación',
     modules: [
       { key: 'flota', label: 'Flota de vehículos' },
+      { key: 'inventario', label: 'Inventario móvil' },
       { key: 'maquinaria', label: 'Maquinaria' },
       { key: 'repuestos', label: 'Repuestos' },
       { key: 'epp_ropa', label: 'EPP y ropa' },
@@ -83,6 +84,7 @@ export const PAGE_MODULE: Record<string, ModuleKey> = {
   'rrhh-documentos': 'rrhh_documentos',
   'personas-pagos': 'personas_pagos',
   'flota-vehiculos': 'flota',
+  inventario: 'inventario',
   maquinaria: 'maquinaria',
   repuestos: 'repuestos',
   'epp-ropa': 'epp_ropa',
@@ -99,7 +101,7 @@ const PAGE_ORDER = [
   'dashboard', 'google-ads', 'clientes', 'empresas-asociadas', 'presupuestos',
   'cotizaciones', 'ordenes-compra', 'comprobantes-comisiones', 'publicaciones-productos', 'ordenes', 'crm', 'whatsapp',
   'rrhh-personas', 'rrhh-contratos', 'rrhh-ausencias', 'rrhh-documentos',
-  'personas-pagos', 'flota-vehiculos', 'maquinaria', 'repuestos', 'epp-ropa',
+  'personas-pagos', 'flota-vehiculos', 'inventario', 'maquinaria', 'repuestos', 'epp-ropa',
   'documentos-empresa', 'cpanel-hosting', 'auditorias', 'importar', 'ia', 'supabase', 'usuarios-permisos',
 ]
 

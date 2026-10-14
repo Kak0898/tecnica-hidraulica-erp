@@ -131,3 +131,11 @@ el catálogo `sistema_modulos`, de modo que nuevas secciones puedan agregarse si
 reescribir restricciones antiguas. Al terminar, vuelve a desplegar
 `crear-usuario-empresa` para habilitar la vinculación opcional entre usuario y
 ficha laboral.
+
+Para habilitar la vista unificada de inventario móvil y asignarla a operadores,
+ejecuta:
+
+`19_inventario_unificado.sql`
+
+El patch 19 es idempotente y solo registra el permiso `inventario`; reutiliza las
+tablas existentes de maquinaria, repuestos y EPP/ropa sin mover ni duplicar datos.

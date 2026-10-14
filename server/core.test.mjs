@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createFileToken, createSession, verifyFileToken } from './auth.mjs'
-import { hasAnyModule } from './policies.mjs'
+import { ALL_MODULES, TABLE_ACCESS, hasAnyModule } from './policies.mjs'
 import { parseSelect, serializeColumnValue } from './query.mjs'
 
 process.env.JWT_SECRET = 'secreto-de-prueba-con-mas-de-32-caracteres'
@@ -26,6 +26,14 @@ test('los administradores y módulos autorizados pasan el control de acceso', ()
   assert.equal(hasAnyModule({ isAdmin: true, modules: new Set() }, ['personas_pagos']), true)
   assert.equal(hasAnyModule({ isAdmin: false, modules: new Set(['flota']) }, ['flota']), true)
   assert.equal(hasAnyModule({ isAdmin: false, modules: new Set(['flota']) }, ['personas_pagos']), false)
+})
+
+test('inventario unificado puede operar máquinas, repuestos y EPP', () => {
+  assert.equal(ALL_MODULES.includes('inventario'), true)
+  for (const table of ['machines', 'spare_parts', 'epp_items']) {
+    assert.equal(TABLE_ACCESS[table].read.includes('inventario'), true)
+    assert.equal(TABLE_ACCESS[table].write.includes('inventario'), true)
+  }
 })
 
 test('las sesiones y enlaces de archivo usan tokens de tipo distinto', () => {

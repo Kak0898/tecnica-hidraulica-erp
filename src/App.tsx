@@ -9,6 +9,7 @@ import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
 import { FileSpreadsheet } from 'lucide-react';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })))
+const Inventario = lazy(() => import('./pages/Inventario').then((module) => ({ default: module.Inventario })))
 const Maquinaria = lazy(() => import('./pages/Maquinaria').then((module) => ({ default: module.Maquinaria })))
 const Repuestos = lazy(() => import('./pages/Repuestos').then((module) => ({ default: module.Repuestos })))
 const Auditorias = lazy(() => import('./pages/Auditorias').then((module) => ({ default: module.Auditorias })))
@@ -143,6 +144,7 @@ export default function App(){
   {page==='personas-pagos' && <PersonasPagos/>}
   {page==='flota-vehiculos' && <FlotaVehiculos/>}
   {page==='google-ads' && <GoogleAds/>}
+  {page==='inventario' && <Inventario/>}
   {page==='maquinaria' && <Maquinaria/>}
   {page==='repuestos' && <Repuestos/>}
   {page==='epp-ropa' && <EppRopa/>}

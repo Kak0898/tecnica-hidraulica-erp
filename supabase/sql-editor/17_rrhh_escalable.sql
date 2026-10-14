@@ -35,6 +35,7 @@ values
   ('rrhh_documentos', 'Documentos y alertas', 'rrhh', 230, false),
   ('personas_pagos', 'Remuneraciones y pagos', 'rrhh', 240, false),
   ('flota', 'Flota de vehiculos', 'operaciones', 300, false),
+  ('inventario', 'Inventario movil', 'operaciones', 305, false),
   ('maquinaria', 'Maquinaria', 'operaciones', 310, false),
   ('repuestos', 'Repuestos', 'operaciones', 320, false),
   ('epp_ropa', 'EPP y ropa', 'operaciones', 330, false),

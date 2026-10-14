@@ -7,15 +7,16 @@ const sources = [
   ['Compatibilidad PostgreSQL', 'database/prelude.sql'],
   ['Esquema integral TH Control', 'supabase/schema.sql'],
   ['Recursos Humanos escalable', 'supabase/sql-editor/17_rrhh_escalable.sql'],
+  ['Ordenes de compra', 'database/migrations/20260903-ordenes-compra.sql'],
   ['API propia y permisos finales', 'database/postlude.sql'],
 ]
 
 const sections = []
 for (const [title, relativePath] of sources) {
   let contents = await readFile(path.join(root, relativePath), 'utf8')
-  // El parche 17 era ejecutable por separado y traía su propia transacción.
-  // El archivo integral usa una única transacción para no dejar instalaciones parciales.
-  if (relativePath === 'supabase/sql-editor/17_rrhh_escalable.sql') {
+  // Los parches incrementales son ejecutables por separado y traen su propia
+  // transacción. El archivo integral usa una sola transacción global.
+  if (relativePath === 'supabase/sql-editor/17_rrhh_escalable.sql' || relativePath.startsWith('database/migrations/')) {
     contents = contents.replace(/^\s*begin;\s*$/gim, '').replace(/^\s*commit;\s*$/gim, '')
   }
   sections.push(`\n-- ============================================================================\n-- ${title}\n-- Fuente: ${relativePath}\n-- ============================================================================\n\n${contents.trim()}\n`)

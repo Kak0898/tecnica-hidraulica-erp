@@ -24,6 +24,7 @@
     "db:seed:ordenes-compra": "node database/seed-ordenes-compra.mjs",
     "db:seed:comisiones-importacion": "node database/seed-comisiones-importacion.mjs",
     "db:seed:ordenes-formato": "node database/seed-ordenes-formato.mjs",
+    "db:seed:inventario": "node database/seed-inventario-unificado.mjs",
     "db:migrate:supabase": "node database/migrate-from-supabase.mjs",
     "storage:migrate:supabase": "node database/migrate-storage.mjs",
     "deploy:dev": "bash deploy/update-development.sh"
