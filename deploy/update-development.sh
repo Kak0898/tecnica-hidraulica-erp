@@ -50,5 +50,14 @@ echo "Reiniciando $SERVICE_LABEL con launchd..."
 launchctl kickstart -k "gui/$(id -u)/$SERVICE_LABEL"
 
 echo "Verificando el servicio..."
-curl --fail --silent --show-error "$HEALTH_URL"
+for attempt in {1..15}; do
+  if curl --fail --silent "$HEALTH_URL"; then
+    break
+  fi
+  if [[ "$attempt" -eq 15 ]]; then
+    echo "El servicio no respondio despues de 15 intentos." >&2
+    exit 1
+  fi
+  sleep 1
+done
 printf '\nDeploy de desarrollo listo.\n'
