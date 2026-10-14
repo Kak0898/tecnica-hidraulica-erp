@@ -128,12 +128,14 @@ npm run build
 npm start
 ```
 
-En un servidor se recomienda ejecutar `npm start` mediante systemd o PM2 y utilizar Nginx como proxy HTTPS hacia `127.0.0.1:3001`.
+En el Mac servidor, `npm start` se ejecuta con el agente `launchd`
+`cl.tecnicahidraulica.intranet` en `127.0.0.1:3001`.
 
 Para trabajar desde VS Code y actualizar el servidor de desarrollo con Git,
 consulta [`deploy/git-auto-deploy.md`](deploy/git-auto-deploy.md). El flujo
 recomendado es hacer cambios en tu Mac, ejecutar `npm run build`, subir con
-`git push` y luego correr `npm run deploy:dev` dentro del servidor.
+`git push` y luego correr `cd ~/intranet && npm run deploy:dev` en el servidor.
+El despliegue conserva el `.env`, los archivos subidos y la carpeta documental.
 
 ## Seguridad
 
