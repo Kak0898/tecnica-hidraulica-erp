@@ -34,7 +34,7 @@ try {
   const tables = await database.query(
     `select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
   )
-  assert.equal(tables.rows[0]?.count, 46, 'El esquema debe crear las 46 tablas públicas esperadas.')
+  assert.equal(tables.rows[0]?.count, 47, 'El esquema debe crear las 47 tablas públicas esperadas.')
 
   // La conexión privada de la API puede preparar cuentas y consultar membresías.
   // Cada petición de usuario cambia después al rol `authenticated`, donde RLS
