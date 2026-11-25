@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
+  Download,
   Minus,
   Package,
   Pencil,
@@ -214,6 +215,7 @@ export function Inventario() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [adjustingId, setAdjustingId] = useState('')
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
@@ -410,6 +412,30 @@ export function Inventario() {
       : currentItem))
   }
 
+  async function exportInventory() {
+    if (!activeEmpresa || exporting) return
+    setExporting(true)
+    setMessage('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Vuelve a iniciar sesión.')
+      const { inventoryExportTables, downloadInventoryWorkbook } = await import('../../shared/inventory-export.js')
+      const results = await Promise.all(inventoryExportTables.map(async ({ name, table }) => {
+        const { data, error } = await supabase.from(table).select('*').eq('empresa_id', activeEmpresa.id).order('code')
+        if (error) throw new Error(`${name}: ${databaseMessage(error)}`)
+        if (!Array.isArray(data)) throw new Error(`${name}: el servidor devolvió datos inválidos.`)
+        return [table, data] as const
+      }))
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      if (currentSession?.access_token !== session.access_token) throw new Error('La sesión cambió. Vuelve a intentarlo.')
+      downloadInventoryWorkbook(Object.fromEntries(results), activeEmpresa.nombre, activeEmpresa.slug)
+    } catch (error) {
+      setMessage(`No se pudo exportar el inventario. ${error instanceof Error ? error.message : 'Vuelve a intentarlo.'}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filters: Array<{ key: InventoryFilter; label: string }> = [
     { key: 'todos', label: 'Todo' },
     { key: 'maquina', label: 'Máquinas' },
@@ -434,9 +460,16 @@ export function Inventario() {
           <p className="text-xs font-black uppercase text-blue-700">{activeEmpresa?.nombre || 'Empresa activa'}</p>
           <h2 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">Inventario</h2>
         </div>
-        <button type="button" onClick={() => openNew()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm">
-          <Plus size={19} /> Agregar artículo
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={exportInventory} disabled={!activeEmpresa || loading || saving || !!adjustingId || exporting} aria-busy={exporting}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+            {exporting ? <RefreshCw className="shrink-0 animate-spin" size={18} /> : <Download className="shrink-0" size={18} />}
+            {exporting ? 'Exportando…' : 'Exportar a Excel'}
+          </button>
+          <button type="button" onClick={() => openNew()} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm">
+            <Plus size={19} className="shrink-0" /> Agregar artículo
+          </button>
+        </div>
       </header>
 
       <section className="sticky top-16 z-20 rounded-2xl border border-slate-200 bg-white p-3 shadow-lg shadow-slate-950/5 lg:static lg:p-4">
