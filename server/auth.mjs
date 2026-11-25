@@ -44,12 +44,17 @@ export function verifyFileToken(token) {
 }
 
 export async function authenticate(req, res, next) {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : ''
+  if (!token) return res.status(401).json({ error: 'Debes iniciar sesión.' })
+  let payload
   try {
-    const header = req.headers.authorization || ''
-    const token = header.startsWith('Bearer ') ? header.slice(7) : ''
-    if (!token) return res.status(401).json({ error: 'Debes iniciar sesión.' })
-    const payload = jwt.verify(token, secret(), { issuer: 'intranet-api' })
-    if (payload.type !== 'session' || !payload.sub) return res.status(401).json({ error: 'Sesión inválida.' })
+    payload = jwt.verify(token, secret(), { issuer: 'intranet-api' })
+  } catch {
+    return res.status(401).json({ error: 'La sesión venció. Inicia sesión nuevamente.' })
+  }
+  if (payload.type !== 'session' || !payload.sub) return res.status(401).json({ error: 'Sesión inválida.' })
+  try {
     const current = await pool.query(`select raw_user_meta_data from auth.users where id = $1 limit 1`, [payload.sub])
     if (!current.rowCount) return res.status(401).json({ error: 'La cuenta ya no existe.' })
     const currentVersion = Number(current.rows[0].raw_user_meta_data?.erp_auth_version || 0)
@@ -57,8 +62,9 @@ export async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Las credenciales cambiaron. Inicia sesión nuevamente.' })
     }
     req.user = { id: payload.sub, email: payload.email || '' }
-    next()
-  } catch {
-    res.status(401).json({ error: 'La sesión venció. Inicia sesión nuevamente.' })
+  } catch (error) {
+    console.error('[auth] No se pudo consultar la cuenta:', error.message)
+    return res.status(503).json({ error: 'El servidor de intranet no puede verificar la sesión. Vuelve a intentarlo cuando se restablezca el servicio.', code: 'SERVICE_UNAVAILABLE' })
   }
+  next()
 }

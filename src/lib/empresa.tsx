@@ -43,8 +43,10 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   const [empresas, setEmpresas] = useState<UsuarioEmpresa[]>([])
   const [activeEmpresaId, setActiveEmpresaId] = useState('')
   const currentUserIdRef = useRef('')
+  const loadVersion = useRef(0)
 
   async function loadEmpresaForUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null) {
+    const version = ++loadVersion.current
     setLoading(true)
     currentUserIdRef.current = user?.id || ''
     setUserEmail(user?.email || '')
@@ -65,14 +67,14 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
       .order('created_at', { ascending: true })
 
     const loaded = (data || []) as unknown as UsuarioEmpresa[]
-    setEmpresas(loaded)
-
     const { data: activeData } = await supabase
       .from('usuario_empresa_activa')
       .select('empresa_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
+    if (version !== loadVersion.current) return
+    setEmpresas(loaded)
     setActiveEmpresaId(activeData?.empresa_id || loaded[0]?.empresas?.id || '')
     setLoading(false)
   }

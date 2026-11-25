@@ -55,6 +55,7 @@ app.use(cors({ origin: true, credentials: false, allowedHeaders: ['Authorization
 app.use(express.json({ limit: '12mb' }))
 
 app.get('/api/health', async (_req, res) => {
+  res.set('Cache-Control', 'no-store')
   try {
     const result = await pool.query(`select current_database() as database, to_regclass('public.empresas') is not null as schema_ready`)
     res.json({ ok: true, database: result.rows[0]?.database, schema_ready: result.rows[0]?.schema_ready === true })

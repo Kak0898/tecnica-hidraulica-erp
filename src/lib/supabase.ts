@@ -1,5 +1,8 @@
-const API_URL = String(import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
+import { API_URL, checkConnection, reportConnectionFailure } from './intranet-connection'
+
 const SESSION_KEY = 'intranet_session'
+const ACTIVITY_KEY = 'intranet_last_activity'
+const IDLE_MS = 5 * 60 * 1000
 
 type ApiError = { message: string; code?: string; name?: string }
 type SessionUser = { id: string; email?: string; user_metadata?: Record<string, any> }
@@ -7,6 +10,10 @@ type Session = { access_token: string; token_type?: string; user: SessionUser }
 
 let currentSession: Session | null = loadSession()
 const authListeners = new Set<(event: string, session: Session | null) => void>()
+let expiryTimer: number | undefined
+let sessionNotice = ''
+const idleNotice = 'Tu sesión se cerró tras 5 minutos de inactividad. Vuelve a iniciar sesión.'
+const expiredNotice = 'Tu sesión venció. Vuelve a iniciar sesión.'
 
 function loadSession(): Session | null {
   try {
@@ -23,6 +30,76 @@ function saveSession(session: Session | null) {
   else window.localStorage.removeItem(SESSION_KEY)
 }
 
+function endSession(notice = '') {
+  sessionNotice = notice
+  saveSession(null)
+  window.clearTimeout(expiryTimer)
+  emitAuth('SIGNED_OUT')
+}
+
+function tokenExpiresAt(token: string) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const expiresAt = JSON.parse(atob(payload)).exp
+    return Number.isFinite(expiresAt) ? expiresAt * 1000 : Infinity
+  } catch {
+    return Infinity
+  }
+}
+
+function checkSession() {
+  window.clearTimeout(expiryTimer)
+  const stored = loadSession()
+  if (stored?.access_token !== currentSession?.access_token) {
+    if (!stored && Date.now() - Number(window.localStorage.getItem(ACTIVITY_KEY)) >= IDLE_MS) sessionNotice = idleNotice
+    currentSession = stored
+    if (stored) sessionNotice = ''
+    emitAuth(stored ? 'SIGNED_IN' : 'SIGNED_OUT')
+  }
+  if (!currentSession) return null
+
+  const now = Date.now()
+  let lastActivity = Number(window.localStorage.getItem(ACTIVITY_KEY))
+  if (!lastActivity || lastActivity > now) {
+    lastActivity = now
+    window.localStorage.setItem(ACTIVITY_KEY, String(now))
+  }
+  const idleAt = lastActivity + IDLE_MS
+  const expiresAt = tokenExpiresAt(currentSession.access_token)
+  const remaining = Math.min(idleAt, expiresAt) - now
+  if (remaining <= 0) {
+    endSession(idleAt <= expiresAt ? idleNotice : expiredNotice)
+    return null
+  }
+  expiryTimer = window.setTimeout(checkSession, remaining)
+  return currentSession
+}
+
+function recordSessionActivity() {
+  if (!checkSession()) return
+  const now = Date.now()
+  if (now - Number(window.localStorage.getItem(ACTIVITY_KEY)) >= 1000) {
+    window.localStorage.setItem(ACTIVITY_KEY, String(now))
+    checkSession()
+  }
+}
+
+export function getSessionNotice() {
+  return sessionNotice
+}
+
+for (const event of ['pointerdown', 'keydown', 'wheel', 'input', 'touchmove']) {
+  window.addEventListener(event, (event) => {
+    if (event.isTrusted && currentSession) recordSessionActivity()
+  }, { capture: true, passive: true })
+}
+window.addEventListener('pageshow', checkSession)
+document.addEventListener('visibilitychange', checkSession)
+window.addEventListener('storage', (event) => {
+  if (event.key === SESSION_KEY || event.key === ACTIVITY_KEY || event.key === null) checkSession()
+})
+checkSession()
+
 function emitAuth(event: string) {
   authListeners.forEach((listener) => listener(event, currentSession))
 }
@@ -35,38 +112,74 @@ function errorFrom(payload: any, status: number): ApiError {
   }
 }
 
-async function apiRequest(path: string, options: RequestInit = {}) {
+function connectionError(message: string, code: string) {
+  return { data: null, error: { message, code, name: 'IntranetApiFetchError' }, response: null }
+}
+
+async function apiRequest(path: string, options: RequestInit = {}, write = Boolean(options.method && options.method !== 'GET')) {
+  const publicRequest = path === '/auth/login' || path === '/auth/request-reset'
+  const session = checkSession()
+  if (!session && !publicRequest) {
+    return connectionError(sessionNotice || 'Debes iniciar sesión.', 'HTTP_401')
+  }
+  if (!navigator.onLine) {
+    reportConnectionFailure()
+    return connectionError('Sin conexión a internet o a la red. Revisa tu conexión y vuelve a intentarlo.', 'NETWORK_ERROR')
+  }
   const headers = new Headers(options.headers || {})
-  if (currentSession?.access_token) headers.set('Authorization', `Bearer ${currentSession.access_token}`)
+  if (!publicRequest && session) headers.set('Authorization', `Bearer ${session.access_token}`)
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 20000)
   try {
     const response = await fetch(`${API_URL}${path}`, { ...options, headers, signal: options.signal || controller.signal })
-    const payload = await response.json().catch(() => ({}))
+    const payload = await response.json().catch(() => null)
     if (!response.ok) {
-      if (response.status === 401 && currentSession) {
-        saveSession(null)
-        emitAuth('SIGNED_OUT')
+      if (response.status === 401 && !publicRequest && loadSession()?.access_token === session?.access_token) {
+        endSession(expiredNotice)
+      }
+      if (response.status >= 500) {
+        if (!payload) {
+          reportConnectionFailure()
+          return connectionError(write
+            ? 'El servidor de intranet no respondió. Revisa si el cambio quedó registrado antes de volver a intentarlo.'
+            : 'El servidor de intranet no respondió.', `HTTP_${response.status}`)
+        }
+        if (payload.code === 'SERVICE_UNAVAILABLE') reportConnectionFailure()
+        else void checkConnection()
       }
       return { data: null, error: errorFrom(payload, response.status), response }
     }
-    return { data: payload, error: null, response }
-  } catch (cause) {
-    const timedOut = cause instanceof DOMException && cause.name === 'AbortError'
-    return {
-      data: null,
-      error: {
-        message: timedOut ? 'La operación tardó demasiado. Revisa la conexión y vuelve a intentarlo.' : cause instanceof Error ? cause.message : 'No fue posible contactar la API.',
-        code: timedOut ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR',
-        name: 'IntranetApiFetchError',
-      },
-      response: null,
+    const expectedKey = path === '/auth/login' ? 'session' : path === '/auth/user' ? 'user' : 'data'
+    if (!payload || typeof payload !== 'object' || !Object.prototype.hasOwnProperty.call(payload, expectedKey)
+      || (path === '/auth/login' && !payload.session?.access_token)) {
+      reportConnectionFailure()
+      return connectionError(write
+        ? 'No se pudo confirmar el guardado. Revisa si el cambio quedó registrado antes de volver a intentarlo.'
+        : 'El servidor de intranet devolvió una respuesta inválida.', 'INVALID_RESPONSE')
     }
+    return { data: payload, error: null, response }
+  } catch {
+    reportConnectionFailure()
+    const message = navigator.onLine ? 'El servidor de intranet no respondió.' : 'Se perdió la conexión a internet o a la red.'
+    return connectionError(write
+      ? `${message} No se pudo confirmar el guardado. Revisa si el cambio quedó registrado antes de volver a intentarlo.`
+      : message, controller.signal.aborted ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR')
   } finally {
     window.clearTimeout(timeout)
   }
 }
+
+// Cotizaciones y presupuestos comparten la sesión y la conexión de la ventana principal.
+Object.assign(window, {
+  intranetFrame: {
+    getSession: checkSession,
+    recordSessionActivity,
+    request: (path: string, body: any) => apiRequest(path, {
+      method: 'POST', body: JSON.stringify(body || {}),
+    }, path !== '/data/query' || body?.action !== 'select'),
+  },
+})
 
 class QueryBuilder {
   private action = 'select'
@@ -132,7 +245,7 @@ class QueryBuilder {
         offset: this.rowOffset,
         onConflict: this.conflict,
       }),
-    })
+    }, this.action !== 'select')
     if (result.error) return { data: null, error: result.error, count: null }
     const rows = result.data?.data ?? []
     if (this.singleMode) {
@@ -151,26 +264,32 @@ class QueryBuilder {
 
 const auth = {
   async getSession() {
-    return { data: { session: currentSession }, error: null }
+    return { data: { session: checkSession() }, error: null }
   },
 
   async signInWithPassword({ email, password }: { email: string; password: string }) {
-    const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false)
     if (result.error) return { data: { session: null, user: null }, error: result.error }
+    sessionNotice = ''
+    window.localStorage.setItem(ACTIVITY_KEY, String(Date.now()))
     saveSession(result.data.session)
+    checkSession()
     emitAuth('SIGNED_IN')
     return { data: { session: currentSession, user: currentSession?.user || null }, error: null }
   },
 
   async signOut() {
-    saveSession(null)
-    emitAuth('SIGNED_OUT')
+    endSession()
     return { error: null }
   },
 
   async updateUser(attributes: { password?: string; data?: Record<string, any> }) {
+    const session = checkSession()
     const result = await apiRequest('/auth/user', { method: 'PATCH', body: JSON.stringify(attributes) })
     if (result.error) return { data: { user: null }, error: result.error }
+    if (!session || checkSession()?.access_token !== session.access_token) {
+      return { data: { user: null }, error: { message: 'Vuelve a iniciar sesión.', code: 'HTTP_401' } }
+    }
     if (result.data.session) saveSession(result.data.session)
     else if (currentSession && result.data.user) saveSession({ ...currentSession, user: result.data.user })
     emitAuth('USER_UPDATED')
@@ -178,7 +297,7 @@ const auth = {
   },
 
   async resetPasswordForEmail(email: string, _options?: any) {
-    const result = await apiRequest('/auth/request-reset', { method: 'POST', body: JSON.stringify({ email }) })
+    const result = await apiRequest('/auth/request-reset', { method: 'POST', body: JSON.stringify({ email }) }, false)
     return { data: result.data, error: result.error }
   },
 
@@ -244,7 +363,7 @@ const whatsapp = {
     return { data: result.data?.data || null, error: result.error }
   },
   async draft(conversationId: string) {
-    const result = await apiRequest(`/whatsapp/conversations/${encodeURIComponent(conversationId)}/draft`, { method: 'POST' })
+    const result = await apiRequest(`/whatsapp/conversations/${encodeURIComponent(conversationId)}/draft`, { method: 'POST' }, false)
     return { data: result.data?.data || null, error: result.error }
   },
 }
@@ -262,7 +381,7 @@ function storageBucket(bucket: string) {
       return { data: result.data?.data || null, error: result.error }
     },
     async createSignedUrl(path: string, expiresIn: number) {
-      const result = await apiRequest(`/storage/${encodeURIComponent(bucket)}/signed-url`, { method: 'POST', body: JSON.stringify({ path, expiresIn }) })
+      const result = await apiRequest(`/storage/${encodeURIComponent(bucket)}/signed-url`, { method: 'POST', body: JSON.stringify({ path, expiresIn }) }, false)
       return { data: result.data?.data || null, error: result.error }
     },
     getPublicUrl(path: string) {

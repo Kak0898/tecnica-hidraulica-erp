@@ -1,25 +1,48 @@
 (function () {
   const apiUrl = String(window.ERP_API_URL || '/api').replace(/\/$/, '');
   const sessionKey = 'intranet_session';
+  let frame;
+  try { frame = window.parent.intranetFrame; }
+  catch { /* El módulo también se puede abrir en otra ventana. */ }
+
+  if (frame) {
+    for (const type of ['pointerdown', 'keydown', 'wheel', 'input', 'touchmove']) {
+      window.addEventListener(type, (event) => {
+        if (event.isTrusted) frame.recordSessionActivity();
+      }, { capture: true, passive: true });
+    }
+  }
 
   function session() {
+    if (frame) return frame.getSession();
     try { return JSON.parse(localStorage.getItem(sessionKey) || 'null'); }
     catch { return null; }
   }
 
   async function request(path, body) {
+    if (frame) return frame.request(path, body);
     const current = session();
-    const response = await fetch(`${apiUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(current?.access_token ? { Authorization: `Bearer ${current.access_token}` } : {}),
-      },
-      body: JSON.stringify(body || {}),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return { data: null, error: { message: payload.error || `Error HTTP ${response.status}`, code: payload.code || `HTTP_${response.status}` } };
-    return { data: payload, error: null };
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch(`${apiUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(current?.access_token ? { Authorization: `Bearer ${current.access_token}` } : {}),
+        },
+        body: JSON.stringify(body || {}),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) return { data: null, error: { message: payload?.error || `Error HTTP ${response.status}`, code: payload?.code || `HTTP_${response.status}` } };
+      if (!payload || !Object.prototype.hasOwnProperty.call(payload, 'data')) throw new Error('Respuesta inválida');
+      return { data: payload, error: null };
+    } catch {
+      return { data: null, error: { message: navigator.onLine ? 'El servidor de intranet no respondió correctamente.' : 'Sin conexión a internet o a la red.', code: 'NETWORK_ERROR' } };
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   class Query {

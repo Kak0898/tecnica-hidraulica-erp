@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, ShieldCheck } from 'lucide-react'
 import { FeedbackToast } from '../components/FeedbackToast'
-import { supabase } from '../lib/supabase'
+import { getSessionNotice, supabase } from '../lib/supabase'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -35,7 +35,7 @@ export function Login() {
       password,
     })
 
-    setMessage(error ? 'Usuario o contraseña incorrectos.' : '')
+    setMessage(error?.message || '')
     setLoading(false)
   }
 
@@ -90,6 +90,8 @@ export function Login() {
               {recoveryMode ? 'Recibirás un enlace de recuperación en tu correo.' : 'Ingresa con el usuario autorizado por TH.'}
             </p>
           </div>
+
+          {getSessionNotice() && <p role="status" className="mb-5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{getSessionNotice()}</p>}
 
           <form onSubmit={submit} className="space-y-5">
             <label className="block">

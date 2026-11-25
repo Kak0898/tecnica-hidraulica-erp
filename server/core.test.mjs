@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createFileToken, createSession, verifyFileToken } from './auth.mjs'
+import { authenticate, createFileToken, createSession, verifyFileToken } from './auth.mjs'
+import { pool } from './db.mjs'
 import { ALL_MODULES, TABLE_ACCESS, hasAnyModule } from './policies.mjs'
 import { parseSelect, serializeColumnValue } from './query.mjs'
 
@@ -45,4 +46,25 @@ test('las sesiones y enlaces de archivo usan tokens de tipo distinto', () => {
   assert.equal(decoded.bucket, 'rrhh-documentos')
   assert.equal(decoded.path, 'empresa/documento.pdf')
   assert.throws(() => verifyFileToken(session.access_token), /Firma de archivo inválida/)
+})
+
+test('una caída de PostgreSQL devuelve 503 y un token inválido devuelve 401', async (t) => {
+  const query = t.mock.method(pool, 'query', async () => { throw new Error('PostgreSQL no disponible') })
+  t.mock.method(console, 'error', () => {})
+  const session = createSession({ id: '11111111-1111-4111-8111-111111111111' })
+  let status
+  let body
+  const res = {
+    status(code) { status = code; return this },
+    json(value) { body = value; return this },
+  }
+  const next = () => assert.fail('La petición no debe continuar')
+
+  await authenticate({ headers: { authorization: 'Bearer invalido' } }, res, next)
+  assert.equal(status, 401)
+  assert.equal(query.mock.callCount(), 0)
+
+  await authenticate({ headers: { authorization: `Bearer ${session.access_token}` } }, res, next)
+  assert.equal(status, 503)
+  assert.equal(body.code, 'SERVICE_UNAVAILABLE')
 })
